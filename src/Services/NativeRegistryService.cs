@@ -5,6 +5,7 @@ using System.Linq;
 using System.Management.Automation;
 using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32;
 using PSWindowsImageTools.Models;
 
 namespace PSWindowsImageTools.Services
@@ -139,38 +140,347 @@ namespace PSWindowsImageTools.Services
         }
 
         /// <summary>
-        /// Modifies registry values in offline image (future implementation)
+        /// Modifies registry values in an offline image by converting the modifications to registry
+        /// operations and delegating to <see cref="ApplyRegistryOperations(string, RegistryOperation[], PSCmdlet)"/>.
+        /// That path enables the required privileges, loads the affected hives with write access, applies
+        /// each operation, and unloads the hives in a finally block. Note that this does not create backups;
+        /// callers that need them should use <see cref="BackupRegistryHives"/> first. Modifications that
+        /// cannot be converted (unknown hive root, missing key path, unrecognized operation or value type,
+        /// or malformed value data) are skipped and reported via a warning.
         /// </summary>
         /// <param name="mountPath">Path where the Windows image is mounted</param>
         /// <param name="modifications">Registry modifications to apply</param>
         /// <param name="cmdlet">PowerShell cmdlet for logging</param>
-        /// <returns>True if modifications were successful</returns>
+        /// <returns>True if all applicable modifications were applied successfully</returns>
         public bool ModifyOfflineRegistry(string mountPath, List<RegistryModification> modifications, PSCmdlet? cmdlet = null)
         {
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                    $"Modifying offline registry with {modifications.Count} changes");
+                if (modifications == null || modifications.Count == 0)
+                {
+                    LoggingService.WriteWarning(cmdlet, ServiceName,
+                        "No registry modifications were provided to apply");
+                    return false;
+                }
 
-                // TODO: Implement registry modifications
-                // This will require:
-                // 1. Backing up original hives
-                // 2. Loading hives with write access
-                // 3. Applying modifications
-                // 4. Unloading hives
-                // 5. Verifying changes
+                LoggingService.WriteVerbose(cmdlet, ServiceName,
+                    $"Modifying offline registry with {modifications.Count} changes at {mountPath}");
 
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    "Registry modification functionality not yet implemented");
+                var operations = ConvertToRegistryOperations(modifications);
+                if (operations.Count == 0)
+                {
+                    LoggingService.WriteWarning(cmdlet, ServiceName,
+                        "None of the registry modifications could be converted to registry operations");
+                    return false;
+                }
 
-                return false;
+                if (operations.Count < modifications.Count)
+                {
+                    LoggingService.WriteWarning(cmdlet, ServiceName,
+                        $"Skipped {modifications.Count - operations.Count} registry modification(s) that could not be converted");
+                }
+
+                // Reuse the proven hive-mounted write path:
+                // EnablePrivileges -> MountRequiredHives -> apply each operation -> UnmountHives in finally.
+                return ApplyRegistryOperations(mountPath, operations.ToArray(), cmdlet);
             }
             catch (Exception ex)
             {
-                LoggingService.WriteError(cmdlet, ServiceName, 
+                LoggingService.WriteError(cmdlet, ServiceName,
                     $"Failed to modify offline registry: {ex.Message}", ex);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Converts registry modifications into registry operations for the hive-mounted write path.
+        /// Modifications that cannot be converted (unknown hive root, missing key path, unrecognized
+        /// operation or value type, or malformed value data) are skipped.
+        /// </summary>
+        /// <param name="modifications">Registry modifications to convert</param>
+        /// <returns>Converted registry operations; invalid modifications are omitted from the result</returns>
+        internal static List<RegistryOperation> ConvertToRegistryOperations(List<RegistryModification> modifications)
+        {
+            var operations = new List<RegistryOperation>();
+            if (modifications == null)
+            {
+                return operations;
+            }
+
+            foreach (var modification in modifications)
+            {
+                var operation = ConvertRegistryModification(modification);
+                if (operation != null)
+                {
+                    operations.Add(operation);
+                }
+            }
+
+            return operations;
+        }
+
+        /// <summary>
+        /// Converts a single registry modification into a registry operation, or null if it cannot be converted
+        /// </summary>
+        private static RegistryOperation? ConvertRegistryModification(RegistryModification modification)
+        {
+            if (modification == null)
+            {
+                return null;
+            }
+
+            var hive = NormalizeHiveName(modification.HiveName);
+            if (string.IsNullOrEmpty(hive) || string.IsNullOrWhiteSpace(modification.KeyPath))
+            {
+                return null;
+            }
+
+            var operationKind = ParseOperationType(modification.Operation);
+            if (operationKind == null)
+            {
+                return null;
+            }
+
+            var registryOperation = new RegistryOperation
+            {
+                Operation = operationKind.Value,
+                Hive = hive,
+                Key = modification.KeyPath.Trim(),
+                ValueName = modification.ValueName ?? string.Empty,
+                Value = modification.ValueData
+            };
+
+            if (operationKind == RegistryOperationType.Create || operationKind == RegistryOperationType.Modify)
+            {
+                var valueType = ParseValueType(modification.ValueType);
+                if (valueType == null)
+                {
+                    return null;
+                }
+
+                registryOperation.ValueType = valueType.Value;
+                if (!TryConvertValueData(modification.ValueData, valueType.Value, out var converted))
+                {
+                    return null;
+                }
+
+                registryOperation.Value = converted;
+            }
+            else
+            {
+                registryOperation.ValueType = RegistryValueKind.Unknown;
+                registryOperation.Value = null;
+                if (operationKind == RegistryOperationType.RemoveKey)
+                {
+                    registryOperation.ValueName = string.Empty;
+                }
+            }
+
+            return registryOperation;
+        }
+
+        /// <summary>
+        /// Normalizes a hive root name to its short form used by registry operations
+        /// </summary>
+        private static string NormalizeHiveName(string hiveName)
+        {
+            switch (hiveName?.Trim().ToUpperInvariant())
+            {
+                case "HKLM":
+                case "HKEY_LOCAL_MACHINE":
+                    return "HKLM";
+                case "HKCU":
+                case "HKEY_CURRENT_USER":
+                    return "HKCU";
+                case "HKU":
+                case "HKEY_USERS":
+                    return "HKU";
+                case "HKCR":
+                case "HKEY_CLASSES_ROOT":
+                    return "HKCR";
+                default:
+                    return string.Empty;
+            }
+        }
+
+        /// <summary>
+        /// Parses a modification operation string into a registry operation type, or null if unrecognized
+        /// </summary>
+        private static RegistryOperationType? ParseOperationType(string operation)
+        {
+            switch (operation?.Trim().ToUpperInvariant())
+            {
+                case "CREATE":
+                    return RegistryOperationType.Create;
+                case "SET":
+                case "MODIFY":
+                    return RegistryOperationType.Modify;
+                case "DELETE":
+                case "REMOVE":
+                    return RegistryOperationType.Remove;
+                case "DELETEKEY":
+                case "REMOVEKEY":
+                    return RegistryOperationType.RemoveKey;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// Parses a registry value type string into a RegistryValueKind.
+        /// An empty or whitespace type defaults to String (matches the recipe application path).
+        /// </summary>
+        private static RegistryValueKind? ParseValueType(string valueType)
+        {
+            switch (valueType?.Trim().ToUpperInvariant())
+            {
+                case null:
+                case "":
+                    return RegistryValueKind.String;
+                case "STRING":
+                case "REG_SZ":
+                    return RegistryValueKind.String;
+                case "EXPANDSTRING":
+                case "EXPAND_STRING":
+                case "REG_EXPAND_SZ":
+                    return RegistryValueKind.ExpandString;
+                case "DWORD":
+                case "REG_DWORD":
+                    return RegistryValueKind.DWord;
+                case "QWORD":
+                case "REG_QWORD":
+                    return RegistryValueKind.QWord;
+                case "BINARY":
+                case "REG_BINARY":
+                    return RegistryValueKind.Binary;
+                case "MULTISTRING":
+                case "MULTI_STRING":
+                case "REG_MULTI_SZ":
+                    return RegistryValueKind.MultiString;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// Converts ValueData to the CLR type expected for the given registry value kind.
+        /// Returns false when the data cannot be converted.
+        /// </summary>
+        private static bool TryConvertValueData(object? valueData, RegistryValueKind valueType, out object? converted)
+        {
+            converted = null;
+
+            try
+            {
+                switch (valueType)
+                {
+                    case RegistryValueKind.String:
+                    case RegistryValueKind.ExpandString:
+                        converted = valueData?.ToString() ?? string.Empty;
+                        return true;
+
+                    case RegistryValueKind.DWord:
+                        converted = ConvertDWord(valueData);
+                        return true;
+
+                    case RegistryValueKind.QWord:
+                        converted = ConvertQWord(valueData);
+                        return true;
+
+                    case RegistryValueKind.Binary:
+                        converted = ConvertBinary(valueData);
+                        return true;
+
+                    case RegistryValueKind.MultiString:
+                        converted = ConvertMultiString(valueData);
+                        return true;
+
+                    default:
+                        return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Converts value data to a DWORD (accepts decimal or 0x-hex strings)
+        /// </summary>
+        private static uint ConvertDWord(object? value)
+        {
+            if (value is string text)
+            {
+                var trimmed = text.Trim();
+                if (trimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                {
+                    return uint.Parse(trimmed.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture);
+                }
+                return uint.Parse(trimmed, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return Convert.ToUInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Converts value data to a QWORD (accepts decimal or 0x-hex strings)
+        /// </summary>
+        private static ulong ConvertQWord(object? value)
+        {
+            if (value is string text)
+            {
+                var trimmed = text.Trim();
+                if (trimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ulong.Parse(trimmed.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture);
+                }
+                return ulong.Parse(trimmed, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            return Convert.ToUInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Converts value data to a byte array (accepts byte[] or hex in .reg representations)
+        /// </summary>
+        private static byte[] ConvertBinary(object? value)
+        {
+            if (value is byte[] bytes)
+            {
+                return bytes;
+            }
+
+            if (value is string text)
+            {
+                // Accept hex in common .reg representations: "DE,AD", "DE AD", "DE-AD"
+                var cleaned = text.Replace(" ", "").Replace(",", "").Replace("-", "").Replace("\\", "");
+                if (cleaned.Length % 2 != 0)
+                {
+                    throw new FormatException("Hex string must have an even number of digits");
+                }
+
+                var result = new byte[cleaned.Length / 2];
+                for (int i = 0; i < result.Length; i++)
+                {
+                    result[i] = Convert.ToByte(cleaned.Substring(i * 2, 2), 16);
+                }
+                return result;
+            }
+
+            throw new InvalidCastException("Binary value data must be a byte array or a hex string");
+        }
+
+        /// <summary>
+        /// Converts value data to a multi-string array (accepts string[] or NUL-separated strings)
+        /// </summary>
+        private static string[] ConvertMultiString(object? value)
+        {
+            if (value is string[] strings)
+            {
+                return strings;
+            }
+
+            var text = value?.ToString() ?? string.Empty;
+            return text.Split(new char[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
         }
 
         /// <summary>
@@ -910,6 +1220,13 @@ namespace PSWindowsImageTools.Services
 
     /// <summary>
     /// Represents a registry modification to be applied
+    /// </summary>
+    /// <summary>
+    /// Represents a registry modification to be applied to a mounted Windows image.
+    /// <see cref="HiveName"/> must be a registry root (HKLM, HKCU, HKU, HKCR or the full HKEY_* name);
+    /// <see cref="KeyPath"/> is the path below that root (e.g., "SOFTWARE\Microsoft\Windows\CurrentVersion\Run").
+    /// "Set" creates or updates a value, "Create" only creates, "Delete"/"Remove" removes a value, and
+    /// "DeleteKey"/"RemoveKey" removes an entire key.
     /// </summary>
     public class RegistryModification
     {

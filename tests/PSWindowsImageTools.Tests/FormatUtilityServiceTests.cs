@@ -215,5 +215,56 @@ namespace PSWindowsImageTools.Tests
             Assert.Equal("2.0 hours", FormatUtilityService.FormatDuration(TimeSpan.FromHours(2)));
             Assert.Equal("1.5 days", FormatUtilityService.FormatDuration(TimeSpan.FromHours(36)));
         }
+
+        [Theory]
+        [InlineData("11.0.26100.3007", 11, 0, 26100, 3007)]
+        [InlineData("11.0.26100.0", 11, 0, 26100, 0)]
+        public void ParseVersion_FutureKernelFullVersionPassesThrough(string input, int major, int minor, int build, int revision)
+        {
+            var result = FormatUtilityService.ParseVersion(input);
+
+            Assert.NotNull(result);
+            Assert.Equal(new Version(major, minor, build, revision), result);
+        }
+
+        [Fact]
+        public void ParseVersion_FutureKernelMissingRevisionIsPadded()
+        {
+            var result = FormatUtilityService.ParseVersion("11.0.26100");
+
+            Assert.NotNull(result);
+            Assert.Equal(new Version(11, 0, 26100, 0), result);
+        }
+
+        [Theory]
+        [InlineData("11.1.26100.1", 11, 1, 26100, 1)]
+        public void ParseVersion_FutureKernelNonZeroMinorIsPreserved(string input, int major, int minor, int build, int revision)
+        {
+            var result = FormatUtilityService.ParseVersion(input);
+
+            Assert.NotNull(result);
+            Assert.Equal(new Version(major, minor, build, revision), result);
+        }
+
+        [Fact]
+        public void ParseVersion_FutureKernelNonZeroMinorMissingRevisionIsPadded()
+        {
+            var result = FormatUtilityService.ParseVersion("11.1.26100");
+
+            Assert.NotNull(result);
+            Assert.Equal(new Version(11, 1, 26100, 0), result);
+        }
+
+        [Fact]
+        public void ParseVersion_FutureKernelTwoPartLeftAsKernelVersion()
+        {
+            // "11.0" is interpreted as a future kernel version, not as a Windows build number
+            var result = FormatUtilityService.ParseVersion("11.0");
+
+            Assert.NotNull(result);
+            Assert.Equal(11, result!.Major);
+            Assert.Equal(0, result.Minor);
+            Assert.Equal(-1, result.Build);
+        }
     }
 }

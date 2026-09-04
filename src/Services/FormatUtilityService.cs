@@ -204,17 +204,21 @@ namespace PSWindowsImageTools.Services
         }
 
         /// <summary>
-        /// Normalizes Windows version to ensure proper format and handle future kernel versions
+        /// Normalizes a version to a Windows-consistent format where possible.
+        /// Current Windows releases report kernel version 10.0 (e.g., 10.0.build.revision) and are
+        /// passed through unchanged. Future kernel versions with a major greater than 10 (e.g.,
+        /// 11.0.26100.1) are treated as authoritative: the kernel version (major.minor) is preserved,
+        /// including a non-zero minor (e.g., 11.1.x.y), which is kept as part of the kernel version
+        /// rather than being rewritten. A future kernel version that has a build but no revision is
+        /// padded to a complete 4-part form (e.g., 11.0.26100 becomes 11.0.26100.0) so the value stays
+        /// comparable. A future kernel version that omits the build entirely (e.g., 11.0) is left
+        /// unchanged, mirroring how a bare 10.0 is handled today.
         /// </summary>
         /// <param name="version">The version to normalize</param>
         /// <returns>Normalized version with proper Windows format</returns>
         private static Version NormalizeWindowsVersion(Version version)
         {
-            // Current Windows versions use 10.0.x.x format
-            // Future placeholder: If Microsoft changes kernel version (e.g., 11.0.x.x),
-            // this method can be updated to handle the transition
-
-            // Handle incomplete versions by ensuring 10.0.x.x format for Windows
+            // Current Windows releases report kernel version 10.0 with a 10.0.build.revision layout
             if (version.Major == 10 && version.Minor == 0)
             {
                 // Already in correct format
@@ -225,21 +229,25 @@ namespace PSWindowsImageTools.Services
                 // Likely a build.revision format, convert to 10.0.build.revision
                 return new Version(10, 0, version.Major, version.Minor);
             }
+            else if (version.Major > 10 && version.Minor >= 0)
+            {
+                // Future kernel version (e.g., 11.0.x.y). The kernel version (major.minor) is treated
+                // as authoritative and preserved as-is, including a non-zero minor. Missing components
+                // are padded only when there is a build but no revision, yielding a consistent 4-part form.
+                if (version.Build >= 0 && version.Revision == -1)
+                {
+                    return new Version(version.Major, version.Minor, version.Build, 0);
+                }
+
+                return version;
+            }
             else if (version.Major > 0 && version.Minor == 0 && version.Build == -1)
             {
                 // Single number version, treat as build number
                 return new Version(10, 0, version.Major, 0);
             }
 
-            // TODO: Future kernel version handling
-            // When Microsoft releases Windows with a new kernel version (e.g., 11.0.x.x),
-            // add detection logic here based on build number ranges or other indicators
-            // Example:
-            // if (version.Build >= FUTURE_KERNEL_BUILD_THRESHOLD)
-            // {
-            //     return new Version(11, 0, version.Build, version.Revision);
-            // }
-
+            // All other formats (e.g., 10.1.x.y or partial versions) are returned unchanged
             return version;
         }
 
