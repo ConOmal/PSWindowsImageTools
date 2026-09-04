@@ -13,7 +13,6 @@ namespace PSWindowsImageTools.Services
     /// </summary>
     public class WindowsImageHealthCheckService
     {
-        private const string ServiceName = "WindowsImageHealthCheckService";
         private readonly ModuleCallbacks _callbacks;
 
         public WindowsImageHealthCheckService(ModuleCallbacks? callbacks = null)
@@ -105,7 +104,7 @@ namespace PSWindowsImageTools.Services
         {
             try
             {
-                var componentStoreReport = new ComponentStoreService(_callbacks).Analyze(mountedImage, imageService);
+                var componentStoreReport = new ComponentStoreService(_callbacks).Analyze(mountedImage, imageService, includeStoreSize: false);
 
                 if (componentStoreReport.SupersededPackages > 0)
                 {
@@ -146,9 +145,7 @@ namespace PSWindowsImageTools.Services
                     });
                 }
 
-                var duplicateCount = drivers
-                    .GroupBy(d => (d.OriginalFileName.ToLowerInvariant(), d.ProviderName.ToLowerInvariant()))
-                    .Count(g => g.Select(d => d.PublishedName).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
+                var duplicateCount = WindowsImageDriverService.FindDuplicateOemGroups(drivers).Count();
 
                 if (duplicateCount > 0)
                 {

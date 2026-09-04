@@ -419,3 +419,29 @@ Describe "Integration: health check" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: SBOM export" -Tag Integration {
+
+    It "exports a snapshot to an SBOM JSON file and round-trips" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+        $sbomDest = Join-Path $Workspace "sbom-export"
+
+        try {
+            $snapshot = $mounted | Get-WindowsImageSnapshot
+            $sbom = $snapshot | Export-WindowsImageSBOM -DestinationPath $sbomDest
+
+            $sbom | Should -Not -BeNullOrEmpty
+            $sbom.ImageName | Should -Be $mounted.ImageName
+
+            $files = Get-ChildItem $sbomDest -Filter "sbom_*.json"
+            $files.Count | Should -Be 1
+
+            $roundTripped = Get-Content $files[0].FullName -Raw | ConvertFrom-Json
+            $roundTripped.ImageName | Should -Be $mounted.ImageName
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}

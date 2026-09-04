@@ -71,7 +71,12 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Analyzes the component store of a mounted image (read-only)
         /// </summary>
-        public ComponentStoreReport Analyze(MountedWindowsImage mountedImage, IWindowsImageService imageService)
+        /// <param name="includeStoreSize">
+        /// Whether to compute WinSxSSizeMB via a full recursive file enumeration. Defaults to true.
+        /// Callers that don't need the size (e.g. the health check, which only reads
+        /// SupersededPackages) should pass false to avoid the I/O cost.
+        /// </param>
+        public ComponentStoreReport Analyze(MountedWindowsImage mountedImage, IWindowsImageService imageService, bool includeStoreSize = true)
         {
             if (mountedImage.MountPath == null)
             {
@@ -99,14 +104,17 @@ namespace PSWindowsImageTools.Services
                 _callbacks.Warning?.Invoke($"Failed to enumerate packages for {mountedImage.ImageName}: {ex.Message}");
             }
 
-            try
+            if (includeStoreSize)
             {
-                report.WinSxSSizeMB = GetDirectorySizeMB(Path.Combine(mountPath, "Windows", "WinSxS"));
-            }
-            catch (Exception ex)
-            {
-                report.Issues.Add($"Failed to measure WinSxS size: {ex.Message}");
-                _callbacks.Warning?.Invoke($"Failed to measure WinSxS size for {mountedImage.ImageName}: {ex.Message}");
+                try
+                {
+                    report.WinSxSSizeMB = GetDirectorySizeMB(Path.Combine(mountPath, "Windows", "WinSxS"));
+                }
+                catch (Exception ex)
+                {
+                    report.Issues.Add($"Failed to measure WinSxS size: {ex.Message}");
+                    _callbacks.Warning?.Invoke($"Failed to measure WinSxS size for {mountedImage.ImageName}: {ex.Message}");
+                }
             }
 
             _callbacks.Verbose?.Invoke($"Component store analysis complete for {mountedImage.ImageName}: {report}");

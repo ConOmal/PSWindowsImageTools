@@ -38,10 +38,10 @@ namespace PSWindowsImageTools.Models
         public List<HealthFinding> Findings { get; set; } = new List<HealthFinding>();
 
         /// <summary>
-        /// Unhealthy if any Corruption finding exists; Warning if any other finding exists; else Healthy
+        /// Unhealthy if any finding has Unhealthy severity; Warning if any other finding exists; else Healthy
         /// </summary>
         public HealthStatus OverallHealth =>
-            Findings.Any(f => f.Category == "Corruption")
+            Findings.Any(f => f.Severity == HealthStatus.Unhealthy)
                 ? HealthStatus.Unhealthy
                 : Findings.Count > 0
                     ? HealthStatus.Warning

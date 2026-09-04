@@ -41,5 +41,19 @@ namespace PSWindowsImageTools.Tests
 
             Assert.Equal(HealthStatus.Unhealthy, report.OverallHealth);
         }
+
+        [Fact]
+        public void OverallHealth_CorruptionCategoryButWarningSeverity_IsNotUnhealthy()
+        {
+            var report = new HealthCheckReport
+            {
+                Findings = new List<HealthFinding>
+                {
+                    new HealthFinding { Category = "Corruption", Severity = HealthStatus.Warning, Message = "Component store was Repairable; repair attempted" }
+                }
+            };
+
+            Assert.Equal(HealthStatus.Warning, report.OverallHealth);
+        }
     }
 }

@@ -10,8 +10,8 @@ namespace PSWindowsImageTools.Cmdlets
 {
     /// <summary>
     /// Captures an inventory snapshot of a mounted Windows image (packages, features,
-    /// capabilities, provisioned AppX, installed software). Snapshots can be exported to JSON
-    /// for later comparison with Compare-WindowsImage.
+    /// capabilities, provisioned AppX, installed software, drivers). Snapshots can be exported
+    /// to JSON for later comparison with Compare-WindowsImage.
     /// </summary>
     [Cmdlet(VerbsCommon.Get, "WindowsImageSnapshot")]
     [OutputType(typeof(ImageSnapshot[]))]

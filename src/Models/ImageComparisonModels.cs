@@ -5,7 +5,7 @@ using System.Linq;
 namespace PSWindowsImageTools.Models
 {
     /// <summary>
-    /// A single item captured in an image snapshot (package, feature, capability, AppX, or software)
+    /// A single item captured in an image snapshot (package, feature, capability, AppX, software, or driver)
     /// </summary>
     public class SnapshotItem
     {

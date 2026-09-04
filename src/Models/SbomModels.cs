@@ -8,7 +8,6 @@ namespace PSWindowsImageTools.Models
     /// </summary>
     public class SbomReport
     {
-        public string WindowsVersion { get; set; } = string.Empty;
         public string ImageName { get; set; } = string.Empty;
         public string ImagePath { get; set; } = string.Empty;
         public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;

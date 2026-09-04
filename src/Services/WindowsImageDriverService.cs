@@ -12,7 +12,6 @@ namespace PSWindowsImageTools.Services
     /// </summary>
     public class WindowsImageDriverService
     {
-        private const string ServiceName = "WindowsImageDriverService";
         private readonly ModuleCallbacks _callbacks;
 
         public WindowsImageDriverService(ModuleCallbacks? callbacks = null)
@@ -60,16 +59,25 @@ namespace PSWindowsImageTools.Services
                 }
             }
 
-            var duplicateGroups = current
-                .GroupBy(d => ((d.OriginalFileName ?? string.Empty).ToLowerInvariant(), (d.ProviderName ?? string.Empty).ToLowerInvariant()))
-                .Where(g => g.Select(d => d.PublishedName).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
-
-            foreach (var group in duplicateGroups)
+            foreach (var group in FindDuplicateOemGroups(current))
             {
                 result.DuplicateOem.AddRange(group);
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Groups drivers by (OriginalFileName, ProviderName) and returns only the groups that have
+        /// more than one distinct PublishedName — i.e., duplicate OEM driver packages. Pure; null-safe
+        /// on both grouping keys. Shared by Compare (which needs the driver objects) and callers that
+        /// only need a count.
+        /// </summary>
+        public static IEnumerable<IGrouping<(string OriginalFileName, string ProviderName), WindowsImageDriverInfo>> FindDuplicateOemGroups(IEnumerable<WindowsImageDriverInfo> drivers)
+        {
+            return drivers
+                .GroupBy(d => ((d.OriginalFileName ?? string.Empty).ToLowerInvariant(), (d.ProviderName ?? string.Empty).ToLowerInvariant()))
+                .Where(g => g.Select(d => d.PublishedName).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
         }
 
         /// <summary>
@@ -117,7 +125,7 @@ namespace PSWindowsImageTools.Services
 
             var fullCatalogPath = Path.IsPathRooted(catalogFilePath)
                 ? catalogFilePath
-                : Path.Combine(mountPath, catalogFilePath.TrimStart('\\', '/'));
+                : Path.Combine(mountPath, catalogFilePath!.TrimStart('\\', '/'));
 
             return Path.GetDirectoryName(fullCatalogPath);
         }

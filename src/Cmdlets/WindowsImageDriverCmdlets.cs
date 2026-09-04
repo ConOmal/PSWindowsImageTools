@@ -25,6 +25,9 @@ namespace PSWindowsImageTools.Cmdlets
         [Parameter(HelpMessage = "Include inbox (Windows-provided) drivers, not just third-party")]
         public SwitchParameter All { get; set; }
 
+        [Parameter(HelpMessage = "Continue processing other images if one fails")]
+        public SwitchParameter ContinueOnError { get; set; }
+
         protected override void ProcessRecord()
         {
             _allMountedImages.AddRange(MountedImages);
@@ -51,6 +54,10 @@ namespace PSWindowsImageTools.Cmdlets
                 catch (Exception ex)
                 {
                     LoggingService.WriteError(this, ComponentName, $"Failed to get drivers for {mountedImage.ImageName}: {ex.Message}", ex);
+                    if (!ContinueOnError.IsPresent)
+                    {
+                        throw;
+                    }
                 }
             }
         }
