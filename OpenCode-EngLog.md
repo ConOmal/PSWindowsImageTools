@@ -117,3 +117,16 @@ Fix the PSWindowsImageTools integration test suite (Phase A3) so all 10 tests pa
 - **Conclusion (final)**: on this Insider host (26200.9168), in-process DISM API consumers fail in two complementary ways: packaged-pwsh can mount/unmount but cannot create servicing sessions (DismHost COM "Class not registered", an MSIX scoping limitation); plain processes (dotnet testhost, console apps) fail earlier at the API session table (`0x80070002`). The DISM CLI works fully. No documented repair path exists; the environment-adaptive state is permanent on this machine. CI (GitHub runners) and real user machines (non-packaged pwsh) are unaffected.
 - **Synced**: `42234bb` — verify-help.ps1 platyPS resolution fix applied to the phase-1 branch too (was main-only).
 - **Standing action for real publishing**: add `PSGALLERY_API_KEY` secret to the fork's repo Settings (user action — key not held in this environment).
+
+## Phase D — Real PSGallery Publish (2026-09-04 ~20:4x UTC)
+- **Secret configured**: installed GitHub CLI (winget), set `PSGALLERY_API_KEY` on ConOmal/PSWindowsImageTools via `gh secret set` (listed back with timestamp 2026-09-04T20:41:16Z).
+- **Real publish**: dispatched `release.yml` with `dry_run=false` on main → run `33917479518` → **"Publish to PSGallery" step SUCCESS**.
+- **Live on PSGallery**: `PSWindowsImageTools v2025.9.4.1` (gallery page returns 200; 54 exported commands).
+- **End-to-end user verification**:
+  1. `Find-Module PSWindowsImageTools` → v2025.9.4.1 ✓
+  2. `Save-Module -RequiredVersion 2025.9.4.1` into a temp dir → OK ✓
+  3. `Test-ModuleManifest` on the downloaded package → 54 exported commands ✓
+  4. `Import-Module` from the downloaded package → OK, commands enumerable ✓
+- Release pipeline fully proven: dispatch/tag → build+test → manifest guard → publish → public discovery → install → load.
+- Note: gallery CDN lags briefly behind publish (nupkg HEAD returned 404 for ~a minute while the page was already live).
+- Open item: the phase-1 branch (62 cmdlets + all fixes) merges to main → next tag picks up the full pipeline (workflow already on main).
