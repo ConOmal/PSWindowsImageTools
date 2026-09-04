@@ -326,3 +326,20 @@ Describe "Integration: component store" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: image drivers" -Tag Integration {
+
+    It "lists drivers for a mounted image without error" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            { $mounted | Get-WindowsImageDriver } | Should -Not -Throw
+            $allDrivers = $mounted | Get-WindowsImageDriver -All
+            $allDrivers.Count | Should -BeGreaterThan 0
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}

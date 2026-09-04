@@ -163,5 +163,20 @@ namespace PSWindowsImageTools.Services
         /// <param name="recursive">Search subdirectories recursively</param>
         /// <param name="progressCallback">Optional progress callback</param>
         void AddDriversFromDirectory(string mountPath, string driverDirectory, bool forceUnsigned = false, bool recursive = true, Action<int, string>? progressCallback = null);
+
+        /// <summary>
+        /// Lists driver packages present in a mounted image
+        /// </summary>
+        /// <param name="mountPath">Path where the image is mounted</param>
+        /// <param name="allDrivers">Include inbox (Windows-provided) drivers, not just third-party</param>
+        /// <returns>Driver package information</returns>
+        System.Collections.Generic.List<Microsoft.Dism.DismDriverPackage> GetDrivers(string mountPath, bool allDrivers = false);
+
+        /// <summary>
+        /// Removes a driver package from a mounted image by its published name (e.g. "oem12.inf")
+        /// </summary>
+        /// <param name="mountPath">Path where the image is mounted</param>
+        /// <param name="publishedName">Published name of the driver to remove</param>
+        void RemoveDriver(string mountPath, string publishedName);
     }
 }

@@ -80,6 +80,7 @@
         # Driver Management
         'Get-INFDriverList',
         'Add-INFDriverList',
+        'Get-WindowsImageDriver',
 
         # ADK and Optional Component Management
         'Get-ADKInstallation',

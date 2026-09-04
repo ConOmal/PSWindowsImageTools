@@ -547,6 +547,49 @@ namespace PSWindowsImageTools.Services
             }
         }
 
+        /// <inheritdoc />
+        public List<DismDriverPackage> GetDrivers(string mountPath, bool allDrivers = false)
+        {
+            Initialize();
+
+            try
+            {
+                _callbacks.Verbose?.Invoke($"Getting drivers from mounted image at {mountPath} (allDrivers: {allDrivers})");
+
+                using var session = DismApi.OpenOfflineSession(mountPath);
+                var drivers = DismApi.GetDrivers(session, allDrivers).ToList();
+
+                _callbacks.Verbose?.Invoke($"Found {drivers.Count} drivers");
+                return drivers;
+            }
+            catch (Exception ex)
+            {
+                _callbacks.Error?.Invoke(ex, $"Failed to get drivers: {ex.Message}");
+                throw;
+            }
+        }
+
+        /// <inheritdoc />
+        public void RemoveDriver(string mountPath, string publishedName)
+        {
+            Initialize();
+
+            try
+            {
+                _callbacks.Verbose?.Invoke($"Removing driver {publishedName} from mounted image at {mountPath}");
+
+                using var session = DismApi.OpenOfflineSession(mountPath);
+                DismApi.RemoveDriver(session, publishedName);
+
+                _callbacks.Verbose?.Invoke($"Driver {publishedName} removed successfully");
+            }
+            catch (Exception ex)
+            {
+                _callbacks.Error?.Invoke(ex, $"Failed to remove driver {publishedName}: {ex.Message}");
+                throw;
+            }
+        }
+
         /// <summary>
         /// Wraps a percent/status callback into a Microsoft.Dism progress callback that never throws
         /// </summary>

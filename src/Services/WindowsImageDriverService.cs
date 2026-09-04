@@ -72,6 +72,37 @@ namespace PSWindowsImageTools.Services
         }
 
         /// <summary>
+        /// Enumerates drivers present in a mounted image
+        /// </summary>
+        public List<WindowsImageDriverInfo> GetDrivers(MountedWindowsImage mountedImage, IWindowsImageService imageService, bool all = false)
+        {
+            if (mountedImage.MountPath == null)
+            {
+                throw new InvalidOperationException($"Mount path is null for image {mountedImage.ImageName}");
+            }
+
+            var mountPath = mountedImage.MountPath.FullName;
+            var drivers = imageService.GetDrivers(mountPath, all);
+
+            return drivers.Select(d => new WindowsImageDriverInfo
+            {
+                PublishedName = d.PublishedName ?? string.Empty,
+                OriginalFileName = d.OriginalFileName ?? string.Empty,
+                ProviderName = d.ProviderName ?? string.Empty,
+                ClassName = d.ClassName ?? string.Empty,
+                ClassDescription = d.ClassDescription ?? string.Empty,
+                Date = d.Date,
+                Version = d.Version?.ToString() ?? string.Empty,
+                BootCritical = d.BootCritical,
+                InBox = d.InBox,
+                DriverSignature = d.DriverSignature,
+                ImageName = mountedImage.ImageName,
+                MountPath = mountPath,
+                CatalogFile = d.CatalogFile
+            }).ToList();
+        }
+
+        /// <summary>
         /// Checks whether the candidate driver beats ANY matching reference entry, not necessarily the highest-versioned one in the group.
         /// A reference group containing multiple versions of the same driver can produce a Superseded result even when a still-higher reference version was also removed.
         /// </summary>
