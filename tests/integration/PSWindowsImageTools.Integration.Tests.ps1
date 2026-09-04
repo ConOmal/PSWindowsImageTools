@@ -291,3 +291,157 @@ Describe "Integration: error contracts" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: component store" -Tag Integration {
+
+    It "reports package counts and WinSxS size for a mounted image" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $report = $mounted | Get-WindowsImageComponentStore
+            $report | Should -Not -BeNullOrEmpty
+            $report.ImageName | Should -Be $mounted.ImageName
+            $report.TotalPackages | Should -BeGreaterOrEqual 0
+            $report.WinSxSSizeMB | Should -BeGreaterOrEqual 0
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "optimizes the component store and reports before/after" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $result = $mounted | Optimize-WindowsImageComponentStore -Confirm:$false
+            $result | Should -Not -BeNullOrEmpty
+            $result.Before | Should -Not -BeNullOrEmpty
+            $result.ExitCode | Should -Be 0
+            $result.After | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe "Integration: image drivers" -Tag Integration {
+
+    It "lists drivers for a mounted image without error" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            { $mounted | Get-WindowsImageDriver } | Should -Not -Throw
+            $allDrivers = $mounted | Get-WindowsImageDriver -All
+            $allDrivers.Count | Should -BeGreaterThan 0
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "removes a third-party driver from a mounted image" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $before = $mounted | Get-WindowsImageDriver
+            if ($before.Count -gt 0) {
+                $target = $before | Select-Object -First 1
+                $result = $target | Remove-WindowsImageDriver -Confirm:$false
+                $result.Success | Should -Be $true
+                $after = $mounted | Get-WindowsImageDriver
+                $after.PublishedName | Should -Not -Contain $target.PublishedName
+            }
+            else {
+                Set-ItResult -Skipped -Because "synthetic baseline image has no third-party drivers to remove"
+            }
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "exports a driver's files to a destination directory" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+        $exportDest = Join-Path $Workspace "driver-export"
+
+        try {
+            $drivers = $mounted | Get-WindowsImageDriver
+            if ($drivers.Count -gt 0) {
+                $drivers | Select-Object -First 1 | Export-WindowsImageDriver -DestinationPath $exportDest
+                (Get-ChildItem $exportDest -Recurse -File).Count | Should -BeGreaterThan 0
+            }
+            else {
+                Set-ItResult -Skipped -Because "synthetic baseline image has no third-party drivers to export"
+            }
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe "Integration: driver comparison" -Tag Integration {
+
+    It "reports no differences between a mounted image and itself" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $result = Compare-WindowsImageDriver -MountedImages @($mounted, $mounted)
+            $result.Added | Should -BeNullOrEmpty
+            $result.Removed | Should -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe "Integration: health check" -Tag Integration {
+
+    It "produces a health report with a computed OverallHealth" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $report = $mounted | Invoke-WindowsImageHealthCheck
+            $report | Should -Not -BeNullOrEmpty
+            $report.OverallHealth | Should -BeIn @("Healthy", "Warning", "Unhealthy")
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe "Integration: SBOM export" -Tag Integration {
+
+    It "exports a snapshot to an SBOM JSON file and round-trips" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+        $sbomDest = Join-Path $Workspace "sbom-export"
+
+        try {
+            $snapshot = $mounted | Get-WindowsImageSnapshot
+            $sbom = $snapshot | Export-WindowsImageSBOM -DestinationPath $sbomDest
+
+            $sbom | Should -Not -BeNullOrEmpty
+            $sbom.ImageName | Should -Be $mounted.ImageName
+
+            $files = Get-ChildItem $sbomDest -Filter "sbom_*.json"
+            $files.Count | Should -Be 1
+
+            $roundTripped = Get-Content $files[0].FullName -Raw | ConvertFrom-Json
+            $roundTripped.ImageName | Should -Be $mounted.ImageName
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}

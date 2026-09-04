@@ -112,6 +112,24 @@ namespace PSWindowsImageTools.Services
 
             try
             {
+                var driverService = new WindowsImageDriverService(_callbacks);
+                foreach (var driver in driverService.GetDrivers(mountedImage, imageService))
+                {
+                    snapshot.Drivers.Add(new SnapshotItem
+                    {
+                        Name = driver.OriginalFileName,
+                        State = driver.ProviderName,
+                        Detail = driver.Version
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _callbacks.Warning?.Invoke($"Failed to capture drivers: {ex.Message}");
+            }
+
+            try
+            {
                 using var registryReader = new RegistryHiveReader(_callbacks);
                 var softwareHivePath = RegistryHiveReader.GetSoftwareHivePath(mountPath);
 
@@ -132,6 +150,23 @@ namespace PSWindowsImageTools.Services
 
             _callbacks.Verbose?.Invoke($"Snapshot captured: {snapshot.TotalItems} items");
             return snapshot;
+        }
+
+        /// <summary>
+        /// Builds an SBOM report from a captured snapshot. Pure — no I/O.
+        /// </summary>
+        public SbomReport BuildSbom(ImageSnapshot snapshot)
+        {
+            return new SbomReport
+            {
+                ImageName = snapshot.ImageName,
+                ImagePath = snapshot.ImagePath,
+                Packages = snapshot.Packages,
+                Drivers = snapshot.Drivers,
+                Features = snapshot.Features,
+                Capabilities = snapshot.Capabilities,
+                Applications = snapshot.Software
+            };
         }
 
         /// <summary>
@@ -184,6 +219,7 @@ namespace PSWindowsImageTools.Services
             result.Categories.Add(CompareCategory("Capabilities", reference.Capabilities, difference.Capabilities));
             result.Categories.Add(CompareCategory("AppxPackages", reference.AppxPackages, difference.AppxPackages));
             result.Categories.Add(CompareCategory("Software", reference.Software, difference.Software));
+            result.Categories.Add(CompareCategory("Drivers", reference.Drivers, difference.Drivers));
 
             return result;
         }

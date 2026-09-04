@@ -52,7 +52,11 @@ namespace PSWindowsImageTools.Tests
                 Software = new List<SnapshotItem>
                 {
                     new SnapshotItem { Name = "Tool", State = "1.0.0", Detail = "Vendor" }
-                }
+                },
+                Drivers = new List<SnapshotItem>
+                {
+                    new SnapshotItem { Name = "net.inf", State = "Acme", Detail = "1.0.0.0" }
+                },
             };
 
             customize?.Invoke(snapshot);
@@ -142,6 +146,19 @@ namespace PSWindowsImageTools.Tests
         {
             Assert.Throws<FileNotFoundException>(() =>
                 ImageComparisonService.LoadSnapshot(Path.Combine(_tempDirectory, "missing.json")));
+        }
+
+        [Fact]
+        public void Compare_IncludesDriversCategory()
+        {
+            var reference = MakeSnapshot("A");
+            var difference = MakeSnapshot("B", s => s.Drivers.Add(new SnapshotItem { Name = "gpu.inf", State = "Vendor", Detail = "2.0.0.0" }));
+
+            var result = new ImageComparisonService().Compare(reference, difference);
+
+            var driversDiff = result.Categories.Single(c => c.Category == "Drivers");
+            Assert.Single(driversDiff.Added);
+            Assert.Equal("gpu.inf", driversDiff.Added[0].Name);
         }
     }
 }

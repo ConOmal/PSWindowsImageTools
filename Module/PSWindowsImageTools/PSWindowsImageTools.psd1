@@ -80,6 +80,10 @@
         # Driver Management
         'Get-INFDriverList',
         'Add-INFDriverList',
+        'Get-WindowsImageDriver',
+        'Remove-WindowsImageDriver',
+        'Compare-WindowsImageDriver',
+        'Export-WindowsImageDriver',
 
         # ADK and Optional Component Management
         'Get-ADKInstallation',
@@ -100,6 +104,13 @@
         'Add-WindowsImageCapability',
         'Remove-WindowsImageCapability',
 
+        # Component Store Analysis
+        'Get-WindowsImageComponentStore',
+        'Optimize-WindowsImageComponentStore',
+
+        # Composite Health Check
+        'Invoke-WindowsImageHealthCheck',
+
         # Recipe-Driven Image Builds
         'New-WindowsImageRecipe',
         'Test-WindowsImageRecipe',
@@ -112,6 +123,7 @@
         # Image Diffing
         'Get-WindowsImageSnapshot',
         'Compare-WindowsImage',
+        'Export-WindowsImageSBOM',
 
 
 
