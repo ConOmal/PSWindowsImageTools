@@ -402,3 +402,20 @@ Describe "Integration: driver comparison" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: health check" -Tag Integration {
+
+    It "produces a health report with a computed OverallHealth" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $report = $mounted | Invoke-WindowsImageHealthCheck
+            $report | Should -Not -BeNullOrEmpty
+            $report.OverallHealth | Should -BeIn @("Healthy", "Warning", "Unhealthy")
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}

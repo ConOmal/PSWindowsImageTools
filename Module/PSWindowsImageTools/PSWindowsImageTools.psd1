@@ -108,6 +108,9 @@
         'Get-WindowsImageComponentStore',
         'Optimize-WindowsImageComponentStore',
 
+        # Composite Health Check
+        'Invoke-WindowsImageHealthCheck',
+
         # Recipe-Driven Image Builds
         'New-WindowsImageRecipe',
         'Test-WindowsImageRecipe',
