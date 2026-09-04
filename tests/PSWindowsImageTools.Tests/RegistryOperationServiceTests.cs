@@ -51,7 +51,7 @@ namespace PSWindowsImageTools.Tests
 ""DeletedValue""=-
 ");
 
-            var operations = new RegistryOperationService().ParseRegFiles(new[] { regFile }, null!);
+            var operations = new RegistryOperationService().ParseRegFiles(new[] { regFile }, ModuleCallbacks.Silent);
 
             Assert.Equal(8, operations.Count);
 
@@ -98,7 +98,7 @@ namespace PSWindowsImageTools.Tests
 ""One""=""1""
 ");
 
-            var operations = new RegistryOperationService().ParseRegFiles(new[] { regFile }, null!);
+            var operations = new RegistryOperationService().ParseRegFiles(new[] { regFile }, ModuleCallbacks.Silent);
 
             Assert.Single(operations);
             Assert.Equal("One", operations[0].ValueName);
@@ -114,7 +114,7 @@ namespace PSWindowsImageTools.Tests
 ""B""=""2""
 ", "two.reg");
 
-            var operations = new RegistryOperationService().ParseRegFiles(new[] { file1, file2 }, null!);
+            var operations = new RegistryOperationService().ParseRegFiles(new[] { file1, file2 }, ModuleCallbacks.Silent);
 
             Assert.Equal(2, operations.Count);
             Assert.Equal(2, operations.Count(op => op.Operation == RegistryOperationType.Create));
@@ -128,7 +128,7 @@ namespace PSWindowsImageTools.Tests
 ""Line2""=""second""
 ");
 
-            var operations = new RegistryOperationService().ParseRegFiles(new[] { regFile }, null!);
+            var operations = new RegistryOperationService().ParseRegFiles(new[] { regFile }, ModuleCallbacks.Silent);
 
             Assert.Equal(2, operations.Count);
             Assert.Equal(@"""Line1""=""first""", operations[0].OriginalLine);
@@ -141,7 +141,7 @@ namespace PSWindowsImageTools.Tests
         {
             var missing = new FileInfo(Path.Combine(_tempDirectory, "does-not-exist.reg"));
 
-            var operations = new RegistryOperationService().ParseRegFiles(new[] { missing }, null!);
+            var operations = new RegistryOperationService().ParseRegFiles(new[] { missing }, ModuleCallbacks.Silent);
 
             Assert.Empty(operations);
         }

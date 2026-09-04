@@ -16,44 +16,55 @@ namespace PSWindowsImageTools.Services
     public class RegistryOperationService
     {
         private const string ServiceName = "RegistryOperationService";
+        private readonly ModuleCallbacks _callbacks;
+
+        /// <summary>
+        /// Creates the service with explicit callbacks
+        /// </summary>
+        public RegistryOperationService(ModuleCallbacks? callbacks = null)
+        {
+            _callbacks = callbacks ?? ModuleCallbacks.Silent;
+        }
 
         /// <summary>
         /// Parses .reg files and returns registry operations
         /// </summary>
         public List<RegistryOperation> ParseRegFiles(FileInfo[] regFiles, PSCmdlet cmdlet)
         {
+            return ParseRegFiles(regFiles, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Parses .reg files and returns registry operations
+        /// </summary>
+        public List<RegistryOperation> ParseRegFiles(FileInfo[] regFiles, ModuleCallbacks callbacks)
+        {
             var operations = new List<RegistryOperation>();
             var totalFiles = regFiles.Length;
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                $"Starting to parse {totalFiles} .reg files");
+            callbacks.Verbose?.Invoke($"Starting to parse {totalFiles} .reg files");
 
             for (int i = 0; i < regFiles.Length; i++)
             {
                 var regFile = regFiles[i];
                 var progress = (int)((double)(i + 1) / totalFiles * 100);
 
-                LoggingService.WriteProgress(cmdlet, "Parsing Registry Files",
-                    $"[{i + 1} of {totalFiles}] - {regFile.Name}",
-                    $"Parsing {regFile.FullName} ({progress}%)", progress);
+                callbacks.Progress?.Invoke(progress, "Parsing Registry Files", $"[{i + 1} of {totalFiles}] - {regFile.Name}: Parsing {regFile.FullName} ({progress}%)");
 
                 try
                 {
-                    var fileOperations = ParseSingleRegFile(regFile, cmdlet);
+                    var fileOperations = ParseSingleRegFile(regFile, callbacks);
                     operations.AddRange(fileOperations);
 
-                    LoggingService.WriteVerbose(cmdlet, ServiceName,
-                        $"[{i + 1} of {totalFiles}] - Parsed {fileOperations.Count} operations from {regFile.Name}");
+                    callbacks.Verbose?.Invoke($"[{i + 1} of {totalFiles}] - Parsed {fileOperations.Count} operations from {regFile.Name}");
                 }
                 catch (Exception ex)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"[{i + 1} of {totalFiles}] - Failed to parse {regFile.Name}: {ex.Message}");
+                    callbacks.Warning?.Invoke($"[{i + 1} of {totalFiles}] - Failed to parse {regFile.Name}: {ex.Message}");
                 }
             }
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName,
-                $"Parsing completed. Found {operations.Count} total registry operations across {totalFiles} files");
+            callbacks.Verbose?.Invoke($"Parsing completed. Found {operations.Count} total registry operations across {totalFiles} files");
 
             return operations;
         }
@@ -61,7 +72,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Parses a single .reg file
         /// </summary>
-        private List<RegistryOperation> ParseSingleRegFile(FileInfo regFile, PSCmdlet cmdlet)
+        private List<RegistryOperation> ParseSingleRegFile(FileInfo regFile, ModuleCallbacks callbacks)
         {
             var operations = new List<RegistryOperation>();
 
@@ -70,7 +81,7 @@ namespace PSWindowsImageTools.Services
                 throw new FileNotFoundException($"Registry file not found: {regFile.FullName}");
             }
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName, $"Parsing registry file: {regFile.FullName}");
+            callbacks.Verbose?.Invoke($"Parsing registry file: {regFile.FullName}");
 
             var lines = File.ReadAllLines(regFile.FullName, Encoding.UTF8);
             string? currentKey = null;
@@ -118,8 +129,7 @@ namespace PSWindowsImageTools.Services
                 }
                 catch (Exception ex)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"Error parsing line {lineNumber} in {regFile.Name}: {ex.Message}");
+                    callbacks.Warning?.Invoke($"Error parsing line {lineNumber} in {regFile.Name}: {ex.Message}");
                 }
             }
 

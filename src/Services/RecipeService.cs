@@ -279,7 +279,7 @@ namespace PSWindowsImageTools.Services
 
                 if (recipe.RegistryModifications.Enabled)
                 {
-                    ApplyRegistryModifications(recipe.RegistryModifications, mountPath, image, result, cmdlet);
+                    ApplyRegistryModifications(recipe.RegistryModifications, mountPath, image, result);
                 }
 
                 // Unmount and save (throws on failure)
@@ -535,7 +535,7 @@ namespace PSWindowsImageTools.Services
             }
         }
 
-        private void ApplyRegistryModifications(RegistryModificationsSection section, string mountPath, WindowsImageInfo image, RecipeImageExecutionResult result, System.Management.Automation.PSCmdlet? cmdlet)
+        private void ApplyRegistryModifications(RegistryModificationsSection section, string mountPath, WindowsImageInfo image, RecipeImageExecutionResult result)
         {
             var sectionResult = BeginSection("registryModifications", result);
 
@@ -554,8 +554,8 @@ namespace PSWindowsImageTools.Services
                 {
                     File.WriteAllLines(tempRegPath, regContent);
 
-                    var operationService = new RegistryOperationService();
-                    var operations = operationService.ParseRegFiles(new[] { new FileInfo(tempRegPath) }, cmdlet!);
+                    var operationService = new RegistryOperationService(_callbacks);
+                    var operations = operationService.ParseRegFiles(new[] { new FileInfo(tempRegPath) }, _callbacks);
                     sectionResult.ItemsProcessed += operations.Count;
 
                     if (operations.Count == 0)
@@ -577,9 +577,9 @@ namespace PSWindowsImageTools.Services
                         IsReadOnly = false
                     };
 
-                    var applicationService = new RegistryApplicationService();
+                    var applicationService = new RegistryApplicationService(_callbacks);
                     applicationService.CleanupAllNativeServices();
-                    var applicationResults = applicationService.ApplyOperations(new[] { shell }, operations.ToArray(), cmdlet!);
+                    var applicationResults = applicationService.ApplyOperations(new[] { shell }, operations.ToArray(), _callbacks);
 
                     foreach (var applicationResult in applicationResults)
                     {

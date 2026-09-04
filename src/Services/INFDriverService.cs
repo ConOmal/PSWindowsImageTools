@@ -14,6 +14,15 @@ namespace PSWindowsImageTools.Services
     public class INFDriverService
     {
         private const string ServiceName = "INFDriverService";
+        private readonly ModuleCallbacks _callbacks;
+
+        /// <summary>
+        /// Creates the service with explicit callbacks
+        /// </summary>
+        public INFDriverService(ModuleCallbacks? callbacks = null)
+        {
+            _callbacks = callbacks ?? ModuleCallbacks.Silent;
+        }
 
         /// <summary>
         /// Scans directories for INF files
@@ -29,38 +38,50 @@ namespace PSWindowsImageTools.Services
             bool parseINF,
             PSCmdlet cmdlet)
         {
+            return ScanForINFDrivers(directories, recurse, parseINF, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Scans directories for INF files using callbacks
+        /// </summary>
+        /// <param name="directories">Directories to scan</param>
+        /// <param name="recurse">Whether to scan recursively</param>
+        /// <param name="parseINF">Whether to parse INF files for metadata</param>
+        /// <param name="callbacks">Callbacks for logging and progress</param>
+        /// <returns>List of INF driver information objects</returns>
+        public List<INFDriverInfo> ScanForINFDrivers(
+            DirectoryInfo[] directories,
+            bool recurse,
+            bool parseINF,
+            ModuleCallbacks callbacks)
+        {
             var allDrivers = new List<INFDriverInfo>();
             var totalDirectories = directories.Length;
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                $"Starting INF driver scan of {totalDirectories} directories (Recurse: {recurse}, Parse: {parseINF})");
+            callbacks.Verbose?.Invoke($"Starting INF driver scan of {totalDirectories} directories (Recurse: {recurse}, Parse: {parseINF})");
 
             for (int i = 0; i < directories.Length; i++)
             {
                 var directory = directories[i];
                 var progress = (int)((double)(i + 1) / totalDirectories * 100);
 
-                LoggingService.WriteProgress(cmdlet, "Scanning for INF Drivers",
-                    $"[{i + 1} of {totalDirectories}] - {directory.Name}",
-                    $"Scanning {directory.FullName} ({progress}%)", progress);
+                callbacks.Progress?.Invoke(progress, "Scanning for INF Drivers",
+                    $"[{i + 1} of {totalDirectories}] - {directory.Name}: Scanning {directory.FullName} ({progress}%)");
 
                 try
                 {
-                    var driversInDirectory = ScanSingleDirectory(directory, recurse, parseINF, cmdlet);
+                    var driversInDirectory = ScanSingleDirectory(directory, recurse, parseINF, callbacks);
                     allDrivers.AddRange(driversInDirectory);
 
-                    LoggingService.WriteVerbose(cmdlet, ServiceName,
-                        $"[{i + 1} of {totalDirectories}] - Found {driversInDirectory.Count} INF files in {directory.FullName}");
+                    callbacks.Verbose?.Invoke($"[{i + 1} of {totalDirectories}] - Found {driversInDirectory.Count} INF files in {directory.FullName}");
                 }
                 catch (Exception ex)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"[{i + 1} of {totalDirectories}] - Failed to scan directory {directory.FullName}: {ex.Message}");
+                    callbacks.Warning?.Invoke($"[{i + 1} of {totalDirectories}] - Failed to scan directory {directory.FullName}: {ex.Message}");
                 }
             }
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName,
-                $"Scan completed. Found {allDrivers.Count} total INF files across {totalDirectories} directories");
+            callbacks.Verbose?.Invoke($"Scan completed. Found {allDrivers.Count} total INF files across {totalDirectories} directories");
 
             return allDrivers;
         }
@@ -72,21 +93,20 @@ namespace PSWindowsImageTools.Services
             DirectoryInfo directory,
             bool recurse,
             bool parseINF,
-            PSCmdlet cmdlet)
+            ModuleCallbacks callbacks)
         {
             var drivers = new List<INFDriverInfo>();
 
             if (!directory.Exists)
             {
-                LoggingService.WriteWarning(cmdlet, ServiceName, $"Directory does not exist: {directory.FullName}");
+                callbacks.Warning?.Invoke($"Directory does not exist: {directory.FullName}");
                 return drivers;
             }
 
             var searchOption = recurse ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
             var infFiles = directory.GetFiles("*.inf", searchOption);
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName,
-                $"Found {infFiles.Length} INF files in {directory.FullName} (recursive: {recurse})");
+            callbacks.Verbose?.Invoke($"Found {infFiles.Length} INF files in {directory.FullName} (recursive: {recurse})");
 
             for (int i = 0; i < infFiles.Length; i++)
             {
@@ -103,12 +123,11 @@ namespace PSWindowsImageTools.Services
                     {
                         try
                         {
-                            driverInfo.ParsedInfo = ParseINFFile(infFile, cmdlet);
+                            driverInfo.ParsedInfo = ParseINFFile(infFile, callbacks);
                         }
                         catch (Exception parseEx)
                         {
-                            LoggingService.WriteWarning(cmdlet, ServiceName,
-                                $"Failed to parse INF file {infFile.FullName}: {parseEx.Message}");
+                            callbacks.Warning?.Invoke($"Failed to parse INF file {infFile.FullName}: {parseEx.Message}");
                             // Still add the driver info even if parsing failed
                             driverInfo.ParsedInfo = null;
                         }
@@ -118,8 +137,7 @@ namespace PSWindowsImageTools.Services
                 }
                 catch (Exception ex)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"Failed to process INF file {infFile.FullName}: {ex.Message}");
+                    callbacks.Warning?.Invoke($"Failed to process INF file {infFile.FullName}: {ex.Message}");
                 }
             }
 
@@ -134,11 +152,22 @@ namespace PSWindowsImageTools.Services
         /// <returns>Parsed INF driver information</returns>
         public INFDriverParseResult ParseINFFile(FileInfo infFile, PSCmdlet cmdlet)
         {
+            return ParseINFFile(infFile, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Parses an INF file to extract driver metadata using callbacks
+        /// </summary>
+        /// <param name="infFile">INF file to parse</param>
+        /// <param name="callbacks">Callbacks for logging</param>
+        /// <returns>Parsed INF driver information</returns>
+        public INFDriverParseResult ParseINFFile(FileInfo infFile, ModuleCallbacks callbacks)
+        {
             var result = new INFDriverParseResult();
 
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, $"Parsing INF file: {infFile.FullName}");
+                callbacks.Verbose?.Invoke($"Parsing INF file: {infFile.FullName}");
 
                 // Validate file exists and is readable
                 if (!infFile.Exists)
@@ -178,19 +207,16 @@ namespace PSWindowsImageTools.Services
                 }
                 catch (Exception catalogEx)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName,
-                        $"Could not check catalog file for {infFile.Name}: {catalogEx.Message}");
+                    callbacks.Verbose?.Invoke($"Could not check catalog file for {infFile.Name}: {catalogEx.Message}");
                     result.IsSigned = false;
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Successfully parsed INF: {result.DriverName} v{result.Version}");
+                callbacks.Verbose?.Invoke($"Successfully parsed INF: {result.DriverName} v{result.Version}");
             }
             catch (Exception ex)
             {
                 result.ParseErrors.Add($"Failed to parse INF file: {ex.Message}");
-                LoggingService.WriteWarning(cmdlet, ServiceName,
-                    $"Error parsing INF file {infFile.FullName}: {ex.Message}");
+                callbacks.Warning?.Invoke($"Error parsing INF file {infFile.FullName}: {ex.Message}");
             }
 
             return result;

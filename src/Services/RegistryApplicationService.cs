@@ -16,6 +16,15 @@ namespace PSWindowsImageTools.Services
         private const string ServiceName = "RegistryApplicationService";
         private readonly Dictionary<string, NativeRegistryService> _nativeServices = new Dictionary<string, NativeRegistryService>();
         private readonly Dictionary<string, string> _mountedHives = new Dictionary<string, string>();
+        private readonly ModuleCallbacks _callbacks;
+
+        /// <summary>
+        /// Creates the service with explicit callbacks
+        /// </summary>
+        public RegistryApplicationService(ModuleCallbacks? callbacks = null)
+        {
+            _callbacks = callbacks ?? ModuleCallbacks.Silent;
+        }
 
         /// <summary>
         /// Applies registry operations to mounted Windows images
@@ -25,33 +34,40 @@ namespace PSWindowsImageTools.Services
             RegistryOperation[] operations,
             PSCmdlet cmdlet)
         {
+            return ApplyOperations(mountedImages, operations, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Applies registry operations to mounted Windows images using callbacks
+        /// </summary>
+        public List<RegistryOperationResult> ApplyOperations(
+            MountedWindowsImage[] mountedImages,
+            RegistryOperation[] operations,
+            ModuleCallbacks callbacks)
+        {
             var results = new List<RegistryOperationResult>();
             var totalImages = mountedImages.Length;
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName,
-                $"Starting to apply {operations.Length} registry operations to {totalImages} mounted images");
+            callbacks.Verbose?.Invoke($"Starting to apply {operations.Length} registry operations to {totalImages} mounted images");
 
             for (int i = 0; i < mountedImages.Length; i++)
             {
                 var mountedImage = mountedImages[i];
                 var progress = (int)((double)(i + 1) / totalImages * 100);
 
-                LoggingService.WriteProgress(cmdlet, "Applying Registry Operations",
-                    $"[{i + 1} of {totalImages}] - {mountedImage.ImageName}",
-                    $"Processing {mountedImage.MountPath} ({progress}%)", progress);
+                callbacks.Progress?.Invoke(progress, "Applying Registry Operations",
+                    $"[{i + 1} of {totalImages}] - {mountedImage.ImageName}: Processing {mountedImage.MountPath} ({progress}%)");
 
                 try
                 {
-                    var result = ApplyOperationsToImage(mountedImage, operations, cmdlet);
+                    var result = ApplyOperationsToImage(mountedImage, operations, callbacks);
                     results.Add(result);
 
-                    LoggingService.WriteVerbose(cmdlet, ServiceName,
-                        $"[{i + 1} of {totalImages}] - Applied {result.SuccessCount} operations to {mountedImage.ImageName}");
+                    callbacks.Verbose?.Invoke($"[{i + 1} of {totalImages}] - Applied {result.SuccessCount} operations to {mountedImage.ImageName}");
                 }
                 catch (Exception ex)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"[{i + 1} of {totalImages}] - Failed to apply operations to {mountedImage.ImageName}: {ex.Message}");
+                    callbacks.Warning?.Invoke($"[{i + 1} of {totalImages}] - Failed to apply operations to {mountedImage.ImageName}: {ex.Message}");
 
                     // Create a failed result
                     var failedResult = new RegistryOperationResult
@@ -64,12 +80,11 @@ namespace PSWindowsImageTools.Services
                 finally
                 {
                     // Ensure hives are unmounted for this image
-                    UnmountAllHives(mountedImage, cmdlet);
+                    UnmountAllHives(mountedImage, callbacks);
                 }
             }
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName,
-                $"Registry operations completed. Processed {totalImages} images");
+            callbacks.Verbose?.Invoke($"Registry operations completed. Processed {totalImages} images");
 
             return results;
         }
@@ -80,15 +95,14 @@ namespace PSWindowsImageTools.Services
         private RegistryOperationResult ApplyOperationsToImage(
             MountedWindowsImage mountedImage,
             RegistryOperation[] operations,
-            PSCmdlet cmdlet)
+            ModuleCallbacks callbacks)
         {
             var result = new RegistryOperationResult
             {
                 MountedImage = mountedImage
             };
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName,
-                $"Applying {operations.Length} registry operations to {mountedImage.ImageName} using native APIs");
+            callbacks.Verbose?.Invoke($"Applying {operations.Length} registry operations to {mountedImage.ImageName} using native APIs");
 
             try
             {
@@ -100,13 +114,12 @@ namespace PSWindowsImageTools.Services
                 {
                     throw new InvalidOperationException("Image mount path is null");
                 }
-                bool success = nativeService.ApplyRegistryOperations(mountedImage.MountPath.FullName, operations, cmdlet);
+                bool success = nativeService.ApplyRegistryOperations(mountedImage.MountPath.FullName, operations, null);
 
                 if (success)
                 {
                     result.SuccessfulOperations.AddRange(operations);
-                    LoggingService.WriteVerbose(cmdlet, ServiceName,
-                        $"Successfully applied all {operations.Length} registry operations to {mountedImage.ImageName}");
+                    callbacks.Verbose?.Invoke($"Successfully applied all {operations.Length} registry operations to {mountedImage.ImageName}");
                 }
                 else
                 {
@@ -115,16 +128,14 @@ namespace PSWindowsImageTools.Services
                     result.SuccessfulOperations.AddRange(operations.Take(halfCount));
                     result.FailedOperations.AddRange(operations.Skip(halfCount));
 
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"Some registry operations failed for {mountedImage.ImageName} - check verbose logs for details");
+                    callbacks.Warning?.Invoke($"Some registry operations failed for {mountedImage.ImageName} - check verbose logs for details");
                 }
             }
             catch (Exception ex)
             {
                 result.FailedOperations.AddRange(operations);
 
-                LoggingService.WriteError(cmdlet, ServiceName,
-                    $"Failed to apply registry operations to {mountedImage.ImageName}: {ex.Message}");
+                callbacks.Error?.Invoke(ex, $"Failed to apply registry operations to {mountedImage.ImageName}: {ex.Message}");
             }
 
             return result;
@@ -193,7 +204,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Mounts a registry hive and returns the mount key
         /// </summary>
-        private string MountRegistryHive(string hive, string hivePath, PSCmdlet cmdlet)
+        private string MountRegistryHive(string hive, string hivePath, ModuleCallbacks callbacks)
         {
             if (!File.Exists(hivePath))
             {
@@ -204,12 +215,11 @@ namespace PSWindowsImageTools.Services
 
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Mounting registry hive {hive} from {hivePath} to {mountKey}");
+                callbacks.Verbose?.Invoke($"Mounting registry hive {hive} from {hivePath} to {mountKey}");
 
                 // Use native registry service for mounting
                 var nativeService = new NativeRegistryService();
-                bool success = nativeService.MountHive(mountKey.Replace("HKLM\\", ""), hivePath, cmdlet);
+                bool success = nativeService.MountHive(mountKey.Replace("HKLM\\", ""), hivePath, null);
 
                 if (!success)
                 {
@@ -221,8 +231,7 @@ namespace PSWindowsImageTools.Services
             }
             catch (Exception ex)
             {
-                LoggingService.WriteWarning(cmdlet, ServiceName,
-                    $"Failed to mount registry hive {hive}: {ex.Message}");
+                callbacks.Warning?.Invoke($"Failed to mount registry hive {hive}: {ex.Message}");
                 throw;
             }
         }
@@ -230,16 +239,15 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Unmounts a registry hive using native Windows API
         /// </summary>
-        private void UnmountRegistryHive(string mountKey, PSCmdlet cmdlet)
+        private void UnmountRegistryHive(string mountKey, ModuleCallbacks callbacks)
         {
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Unmounting registry hive {mountKey} using native API");
+                callbacks.Verbose?.Invoke($"Unmounting registry hive {mountKey} using native API");
 
                 // Use native registry service for unmounting
                 var nativeService = new NativeRegistryService();
-                bool success = nativeService.UnmountHive(mountKey.Replace("HKLM\\", ""), cmdlet);
+                bool success = nativeService.UnmountHive(mountKey.Replace("HKLM\\", ""), null);
 
                 if (success)
                 {
@@ -248,29 +256,26 @@ namespace PSWindowsImageTools.Services
                 }
                 else
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"Failed to unmount registry hive {mountKey}");
+                    callbacks.Warning?.Invoke($"Failed to unmount registry hive {mountKey}");
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Successfully unmounted registry hive {mountKey}");
+                callbacks.Verbose?.Invoke($"Successfully unmounted registry hive {mountKey}");
             }
             catch (Exception ex)
             {
-                LoggingService.WriteWarning(cmdlet, ServiceName,
-                    $"Error unmounting registry hive {mountKey}: {ex.Message}");
+                callbacks.Warning?.Invoke($"Error unmounting registry hive {mountKey}: {ex.Message}");
             }
         }
 
         /// <summary>
         /// Unmounts all registry hives for an image
         /// </summary>
-        private void UnmountAllHives(MountedWindowsImage mountedImage, PSCmdlet cmdlet)
+        private void UnmountAllHives(MountedWindowsImage mountedImage, ModuleCallbacks callbacks)
         {
             var hivesToUnmount = _mountedHives.Values.ToList();
             foreach (var mountKey in hivesToUnmount)
             {
-                UnmountRegistryHive(mountKey, cmdlet);
+                UnmountRegistryHive(mountKey, callbacks);
             }
             _mountedHives.Clear();
         }
@@ -278,26 +283,25 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Applies a single registry operation
         /// </summary>
-        private void ApplySingleOperation(RegistryOperation operation, string mountKey, PSCmdlet cmdlet)
+        private void ApplySingleOperation(RegistryOperation operation, string mountKey, ModuleCallbacks callbacks)
         {
             var fullKeyPath = $"{mountKey}\\{operation.Key}";
 
-            LoggingService.WriteVerbose(cmdlet, ServiceName,
-                $"Applying operation: {operation.Operation} on {fullKeyPath}\\{operation.ValueName}");
+            callbacks.Verbose?.Invoke($"Applying operation: {operation.Operation} on {fullKeyPath}\\{operation.ValueName}");
 
             switch (operation.Operation)
             {
                 case RegistryOperationType.Create:
                 case RegistryOperationType.Modify:
-                    CreateOrModifyValue(fullKeyPath, operation, cmdlet);
+                    CreateOrModifyValue(fullKeyPath, operation, callbacks);
                     break;
 
                 case RegistryOperationType.Remove:
-                    RemoveValue(fullKeyPath, operation.ValueName, cmdlet);
+                    RemoveValue(fullKeyPath, operation.ValueName, callbacks);
                     break;
 
                 case RegistryOperationType.RemoveKey:
-                    RemoveKey(fullKeyPath, cmdlet);
+                    RemoveKey(fullKeyPath, callbacks);
                     break;
 
                 default:
@@ -308,7 +312,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Creates or modifies a registry value
         /// </summary>
-        private void CreateOrModifyValue(string keyPath, RegistryOperation operation, PSCmdlet cmdlet)
+        private void CreateOrModifyValue(string keyPath, RegistryOperation operation, ModuleCallbacks callbacks)
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(keyPath.Substring("HKLM\\".Length));
             if (key == null)
@@ -322,7 +326,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Removes a registry value
         /// </summary>
-        private void RemoveValue(string keyPath, string valueName, PSCmdlet cmdlet)
+        private void RemoveValue(string keyPath, string valueName, ModuleCallbacks callbacks)
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(keyPath.Substring("HKLM\\".Length), true);
             if (key != null)
@@ -334,7 +338,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Removes a registry key
         /// </summary>
-        private void RemoveKey(string keyPath, PSCmdlet cmdlet)
+        private void RemoveKey(string keyPath, ModuleCallbacks callbacks)
         {
             var keySubPath = keyPath.Substring("HKLM\\".Length);
             var lastBackslash = keySubPath.LastIndexOf('\\');

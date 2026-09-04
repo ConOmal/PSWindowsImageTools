@@ -5,6 +5,10 @@ All notable changes to PSWindowsImageTools will be documented in this file.
 ## [2025.09.04] - Phase 2-4: Architecture Refactor & Feature Completion
 
 ### Added
+- **Full cmdlet help**: PlatyPS-generated markdown (`docs/help/`) and compiled MAML help shipped in
+  the module — `Get-Help` works for all exported cmdlets (synopsis, description, examples, parameters)
+- **Image diffing**: `Get-WindowsImageSnapshot` (JSON export) + `Compare-WindowsImage`
+  (added/removed/changed per category, from mounted images or snapshot files)
 - **14 new cmdlets** (51 total exported):
   - Package/feature/capability management: `Get-WindowsImagePackageList`, `Get-WindowsImageFeatureList`,
     `Add-WindowsImagePackage`, `Enable-WindowsImageFeature`, `Disable-WindowsImageFeature`,

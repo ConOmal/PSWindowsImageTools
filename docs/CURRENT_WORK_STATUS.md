@@ -60,8 +60,11 @@
 - 51 exported cmdlets · 99 unit tests passing · build clean (0 warnings)
 
 ## Known Remaining Tech Debt
-- Older services (catalog, ADK, INF, wallpaper, unattend, autopilot) still take PSCmdlet — burn
-  down to ModuleCallbacks opportunistically when touched
-- Docs drift in CmdletReference for older cmdlets fixed 2025-09-04 (reference rewritten from
-  actual signatures); PlatyPS-generated help still planned
+- Remaining PSCmdlet-coupled services (catalog, ADK, wallpaper, unattend, autopilot) accept
+  `PSCmdlet?` nullable params and only use them for null-guarded logging — safe as-is. The three
+  services that previously REQUIRED non-null cmdlet (RegistryOperationService,
+  RegistryApplicationService, INFDriverService) now have ModuleCallbacks overloads and no longer
+  force `null!` in modern call paths
+- PlatyPS help: regenerate via `Scripts/build-help.ps1` + `Scripts/build-help-examples.ps1`,
+  then `New-ExternalHelp` into `Module\PSWindowsImageTools\en-US`
 - Module bin refresh requires no other PowerShell session holding the DLLs (rename-swap used during dev)
