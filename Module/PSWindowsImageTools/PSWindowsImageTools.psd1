@@ -111,6 +111,20 @@
         # Composite Health Check
         'Invoke-WindowsImageHealthCheck',
 
+        # Servicing Chain Intelligence
+        'Get-WindowsImageServicingChain',
+        'Test-WindowsImageServicing',
+
+        # Reserved Storage
+        'Get-WindowsImageReservedStorage',
+        'Set-WindowsImageReservedStorage',
+
+        # Edition Servicing
+        'Set-WindowsImageEdition',
+
+        # WinRE Intelligence
+        'Get-WindowsImageWinRE',
+
         # Recipe-Driven Image Builds
         'New-WindowsImageRecipe',
         'Test-WindowsImageRecipe',

@@ -27,6 +27,34 @@
 
 ## Completed
 
+### Phase 6 — Backlog Batch: Reserved Storage, Edition Servicing, WinRE Intelligence, Servicing Chain (2026-09-04)
+- **Reserved Storage** (spec `docs/superpowers/specs/2026-09-04-reserved-storage-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-reserved-storage.md`): `Get-WindowsImageReservedStorage` /
+  `Set-WindowsImageReservedStorage` (SupportsShouldProcess, `-Enable`/`-Disable` parameter sets).
+  Microsoft.Dism 3.3.12 has no reserved-storage API, so the service shells out to `dism.exe`
+  (`/Get-ReservedStorageState`, `/Set-ReservedStorageState:Enabled|Disabled`) mirroring
+  `ComponentStoreService.Cleanup`; arg-building/parsing is pure and unit-tested.
+- **Edition Servicing** (spec `docs/superpowers/specs/2026-09-04-edition-servicing-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-edition-servicing.md`): `Set-WindowsImageEdition`
+  (SupportsShouldProcess, `-Edition`/`-ProductKey` or `-ServerEdition` parameter sets, `-PassThru`).
+  Uses the managed DISM API (`SetEdition`/`SetEditionAndProductKey` exist in 3.3.12); validation,
+  edition-name normalization, key masking, and result building are pure and unit-tested.
+- **WinRE Intelligence** (spec `docs/superpowers/specs/2026-09-04-winre-intelligence-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-winre-intelligence.md`): `Get-WindowsImageWinRE` reports the
+  embedded WinRE image (presence, path, size, last-modified) plus WIM-header-derived identity
+  (version, image count, compression type, GUID) parsed purely from the 208-byte MSWIM header —
+  never calls DISM; `-Detailed` adds the first image's XML display name.
+- **Servicing Chain Intelligence** (spec `docs/superpowers/specs/2026-09-04-servicing-chain-intelligence-design.md`,
+  plan `docs/superpowers/plans/2026-09-04-servicing-chain-intelligence.md`): `Get-WindowsImageServicingChain`
+  / `Test-WindowsImageServicing` classify installed servicing packages (SSU/LCU via verified
+  `Package_for_ServicingStack`/`Package_for_RollupFix` identity prefixes, SafeOS/.NET heuristic) and
+  flag stale SSU-vs-LCU pairings. Reuses `IWindowsImageService.GetPackages`; classification and
+  ordering validation are pure. (Spec + plan + models + Task-1 tests authored in a parallel session;
+  service, cmdlets, Task-2 tests, help, and integration tests completed here.)
+- All six cmdlets exported in the psd1 (no wildcards), help md + regenerated MAML in sync
+  (68 commands), DLL rebuilt and synced to `Module/PSWindowsImageTools/bin/`.
+- Unit tests now **347/347** (was 226); build 0 warnings/0 errors; help guardrail green (4/4 checks).
+
 ### Phase 5 — Registry Drift Detection + TODO Closure (2026-09-04)
 - **Registry drift phase** (first backlog phase from the phase-1 spec): `Get-WindowsImageSnapshot`
   now captures a defined drift-relevant registry key set (Run/RunOnce, Policies, WindowsUpdate,
