@@ -1,6 +1,6 @@
 # PSWindowsImageTools Cmdlet Reference
 
-Complete reference for all 49 cmdlets in the PSWindowsImageTools module. Signatures below reflect
+Complete reference for all 62 cmdlets in the PSWindowsImageTools module. Signatures below reflect
 the actual exported cmdlets. `*` marks mandatory parameters.
 
 ## Table of Contents
@@ -16,6 +16,7 @@ the actual exported cmdlets. `*` marks mandatory parameters.
 - [Image Export & ISO](#image-export--iso)
 - [Mount Session & One-liner Servicing](#mount-session--one-liner-servicing)
 - [Image Diffing](#image-diffing)
+- [Drivers, Component Store, Health Check & SBOM](#drivers-component-store-health-check--sbom)
 
 ---
 
@@ -426,6 +427,85 @@ $diff = Compare-WindowsImage -ReferencePath vanilla.json -DifferencePath corpora
 $diff.Categories | Format-Table Category, Count
 $diff.Categories | ForEach-Object { $_.Added } | Format-Table Name, State
 ```
+
+---
+
+## Drivers, Component Store, Health Check & SBOM
+
+### Get-WindowsImageDriver
+Lists driver packages present in one or more mounted Windows images.
+
+```powershell
+Get-WindowsImageDriver -MountedImages <MountedWindowsImage*> [-All] [-ContinueOnError]
+```
+
+`-All` includes inbox (Windows-provided) drivers, not just third-party. `-ContinueOnError`
+keeps processing other images if one fails.
+
+### Remove-WindowsImageDriver
+Removes a driver package from a mounted Windows image.
+
+```powershell
+Remove-WindowsImageDriver -Driver <WindowsImageDriverInfo*> [-ContinueOnError] [-WhatIf] [-Confirm]
+```
+
+Takes driver objects from `Get-WindowsImageDriver` via the pipeline.
+
+### Compare-WindowsImageDriver
+Compares driver packages between two mounted Windows images.
+
+```powershell
+Compare-WindowsImageDriver -MountedImages <MountedWindowsImage*> [-All]
+```
+
+### Export-WindowsImageDriver
+Exports driver package files from a mounted Windows image to a destination directory.
+
+```powershell
+Export-WindowsImageDriver -Driver <WindowsImageDriverInfo*> -DestinationPath <DirectoryInfo*> [-ContinueOnError]
+```
+
+### Get-WindowsImageComponentStore
+Analyzes the WinSxS component store of one or more mounted Windows images.
+
+```powershell
+Get-WindowsImageComponentStore -MountedImages <MountedWindowsImage*> [-ContinueOnError]
+```
+
+Reports superseded package counts, store size, and cleanup recommendations.
+
+### Optimize-WindowsImageComponentStore
+Runs component cleanup (and optionally ResetBase) against one or more mounted Windows images.
+
+```powershell
+Optimize-WindowsImageComponentStore -MountedImages <MountedWindowsImage*> [-ResetBase]
+    [-TimeoutMinutes <int>] [-ContinueOnError] [-WhatIf] [-Confirm]
+```
+
+Reports before/after store state and the underlying DISM exit code.
+
+### Invoke-WindowsImageHealthCheck
+Runs a composite health check against one or more mounted Windows images.
+
+```powershell
+Invoke-WindowsImageHealthCheck -MountedImages <MountedWindowsImage*> [-RestoreHealth]
+    [-ContinueOnError] [-WhatIf] [-Confirm]
+```
+
+Rolls drivers, packages, features, and the component store into a single `OverallHealth`
+verdict (`Healthy`/`Warning`/`Unhealthy`). `-RestoreHealth` additionally runs DISM
+health restoration.
+
+### Export-WindowsImageSBOM
+Builds a Software Bill of Materials (SBOM) from a captured Windows image snapshot.
+
+```powershell
+Export-WindowsImageSBOM -Snapshot <ImageSnapshot*> -DestinationPath <DirectoryInfo*>
+Export-WindowsImageSBOM -SnapshotPath <string> -DestinationPath <DirectoryInfo*>
+```
+
+Accepts a snapshot object (from `Get-WindowsImageSnapshot`) or a previously exported
+snapshot JSON file.
 
 ---
 
