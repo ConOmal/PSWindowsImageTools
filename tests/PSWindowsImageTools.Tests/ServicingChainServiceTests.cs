@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Dism;
 using PSWindowsImageTools.Models;
 using PSWindowsImageTools.Services;
@@ -94,6 +95,103 @@ namespace PSWindowsImageTools.Tests
 
             Assert.Equal(0, build);
             Assert.Equal(0, revision);
+        }
+
+        private static ServicingPackageInfo MakeInfo(ServicingPackageRole role, int build, int revision, string name = "test")
+        {
+            return new ServicingPackageInfo
+            {
+                PackageName = name,
+                Role = role,
+                Confidence = ClassificationConfidence.Verified,
+                Build = build,
+                Revision = revision
+            };
+        }
+
+        [Fact]
+        public void ValidateOrdering_LcuWithNoSsu_IsInvalid()
+        {
+            var report = new ServicingChainReport
+            {
+                Packages = { MakeInfo(ServicingPackageRole.CumulativeUpdate, 26100, 9168) }
+            };
+
+            ServicingChainService.ValidateOrdering(report);
+
+            Assert.False(report.OrderingValid);
+            Assert.Null(report.ServicingStackUpdate);
+            Assert.NotNull(report.CumulativeUpdate);
+            Assert.Single(report.Issues);
+        }
+
+        [Fact]
+        public void ValidateOrdering_SsuWithinTolerance_IsValid()
+        {
+            var report = new ServicingChainReport
+            {
+                Packages =
+                {
+                    MakeInfo(ServicingPackageRole.ServicingStackUpdate, 26100, 9156),
+                    MakeInfo(ServicingPackageRole.CumulativeUpdate, 26100, 9168)
+                }
+            };
+
+            ServicingChainService.ValidateOrdering(report);
+
+            Assert.True(report.OrderingValid);
+            Assert.Empty(report.Issues);
+        }
+
+        [Fact]
+        public void ValidateOrdering_SsuFarBehindLcu_IsInvalid()
+        {
+            var report = new ServicingChainReport
+            {
+                Packages =
+                {
+                    MakeInfo(ServicingPackageRole.ServicingStackUpdate, 26100, 8000),
+                    MakeInfo(ServicingPackageRole.CumulativeUpdate, 26100, 9168)
+                }
+            };
+
+            ServicingChainService.ValidateOrdering(report);
+
+            Assert.False(report.OrderingValid);
+            Assert.Single(report.Issues);
+        }
+
+        [Fact]
+        public void ValidateOrdering_NoCumulativeUpdate_IsValidRegardlessOfSsu()
+        {
+            var report = new ServicingChainReport
+            {
+                Packages = { MakeInfo(ServicingPackageRole.ServicingStackUpdate, 26100, 9156) }
+            };
+
+            ServicingChainService.ValidateOrdering(report);
+
+            Assert.True(report.OrderingValid);
+            Assert.Empty(report.Issues);
+        }
+
+        [Fact]
+        public void ValidateOrdering_MultipleSsus_PicksHighestRevision()
+        {
+            var report = new ServicingChainReport
+            {
+                Packages =
+                {
+                    MakeInfo(ServicingPackageRole.ServicingStackUpdate, 26100, 9000, "old-ssu"),
+                    MakeInfo(ServicingPackageRole.ServicingStackUpdate, 26100, 9156, "new-ssu"),
+                    MakeInfo(ServicingPackageRole.CumulativeUpdate, 26100, 9168)
+                }
+            };
+
+            ServicingChainService.ValidateOrdering(report);
+
+            Assert.Equal("new-ssu", report.ServicingStackUpdate!.PackageName);
+            Assert.True(report.OrderingValid);
         }
     }
 }

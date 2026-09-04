@@ -122,5 +122,91 @@ namespace PSWindowsImageTools.Services
             int.TryParse(versionParts[1], out var revision);
             return (build, revision);
         }
+
+        /// <summary>
+        /// Selects the SSU/LCU from an already-classified package list and checks whether the
+        /// SSU's revision is recent enough relative to the LCU's. Pure — operates only on
+        /// report.Packages, no DISM/filesystem access.
+        /// </summary>
+        internal static void ValidateOrdering(ServicingChainReport report, int maxRevisionLag = 200)
+        {
+            report.ServicingStackUpdate = report.Packages
+                .Where(p => p.Role == ServicingPackageRole.ServicingStackUpdate)
+                .OrderByDescending(p => p.Revision)
+                .FirstOrDefault();
+
+            report.CumulativeUpdate = report.Packages
+                .Where(p => p.Role == ServicingPackageRole.CumulativeUpdate)
+                .OrderByDescending(p => p.Revision)
+                .FirstOrDefault();
+
+            if (report.CumulativeUpdate == null)
+            {
+                return;
+            }
+
+            if (report.ServicingStackUpdate == null)
+            {
+                report.OrderingValid = false;
+                report.Issues.Add(
+                    $"Cumulative update {report.CumulativeUpdate.PackageName} is present but no Servicing Stack Update was found");
+                return;
+            }
+
+            var lag = report.CumulativeUpdate.Revision - report.ServicingStackUpdate.Revision;
+            if (lag > maxRevisionLag)
+            {
+                report.OrderingValid = false;
+                report.Issues.Add(
+                    $"Servicing Stack Update revision {report.ServicingStackUpdate.Revision} appears stale relative to " +
+                    $"Cumulative Update revision {report.CumulativeUpdate.Revision} (lag {lag} > {maxRevisionLag})");
+            }
+        }
+
+        /// <summary>
+        /// Analyzes the servicing chain of a mounted image (read-only)
+        /// </summary>
+        public ServicingChainReport Analyze(MountedWindowsImage mountedImage, IWindowsImageService imageService)
+        {
+            if (mountedImage.MountPath == null)
+            {
+                throw new InvalidOperationException($"Mount path is null for image {mountedImage.ImageName}");
+            }
+
+            var mountPath = mountedImage.MountPath.FullName;
+            _callbacks.Verbose?.Invoke($"Analyzing servicing chain for {mountedImage.ImageName} at {mountPath}");
+
+            var report = new ServicingChainReport
+            {
+                ImageName = mountedImage.ImageName,
+                ImagePath = mountedImage.SourceImagePath,
+                MountPath = mountPath
+            };
+
+            try
+            {
+                var packages = imageService.GetPackages(mountPath);
+                foreach (var package in packages)
+                {
+                    var classified = ClassifyPackage(
+                        package.PackageName ?? string.Empty, package.PackageState, package.ReleaseType, package.InstallTime);
+
+                    if (classified != null)
+                    {
+                        report.Packages.Add(classified);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                report.Issues.Add($"Failed to enumerate packages: {ex.Message}");
+                _callbacks.Warning?.Invoke($"Failed to enumerate packages for {mountedImage.ImageName}: {ex.Message}");
+            }
+
+            ValidateOrdering(report);
+
+            _callbacks.Verbose?.Invoke($"Servicing chain analysis complete for {mountedImage.ImageName}: {report}");
+            return report;
+        }
     }
 }

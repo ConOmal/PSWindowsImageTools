@@ -475,3 +475,39 @@ Describe "Integration: SBOM export" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: servicing chain" -Tag Integration {
+
+    It "analyzes the servicing chain of a mounted image without error" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $report = $mounted | Get-WindowsImageServicingChain
+            $report | Should -Not -BeNullOrEmpty
+            $report.ImageName | Should -Be $mounted.ImageName
+            # The synthetic baseline image has no real servicing packages, so Packages may be
+            # empty — this asserts the cmdlet runs cleanly, not a specific SSU/LCU pairing.
+            $report.OrderingValid | Should -BeOfType [bool]
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+
+    It "returns a boolean by default and a full report with -Detailed" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $result = $mounted | Test-WindowsImageServicing
+            $result | Should -BeOfType [bool]
+
+            $detailed = $mounted | Test-WindowsImageServicing -Detailed
+            $detailed.OrderingValid | Should -Be $result
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
