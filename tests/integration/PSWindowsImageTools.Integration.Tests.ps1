@@ -342,4 +342,25 @@ Describe "Integration: image drivers" -Tag Integration {
             $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
         }
     }
+
+    It "removes a third-party driver from a mounted image" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $before = $mounted | Get-WindowsImageDriver
+            if ($before.Count -gt 0) {
+                $target = $before | Select-Object -First 1
+                $target | Remove-WindowsImageDriver -Confirm:$false
+                $after = $mounted | Get-WindowsImageDriver
+                $after.PublishedName | Should -Not -Contain $target.PublishedName
+            }
+            else {
+                Set-ItResult -Skipped -Because "synthetic baseline image has no third-party drivers to remove"
+            }
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
 }

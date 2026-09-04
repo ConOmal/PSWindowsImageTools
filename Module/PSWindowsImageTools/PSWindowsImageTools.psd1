@@ -81,6 +81,7 @@
         'Get-INFDriverList',
         'Add-INFDriverList',
         'Get-WindowsImageDriver',
+        'Remove-WindowsImageDriver',
 
         # ADK and Optional Component Management
         'Get-ADKInstallation',

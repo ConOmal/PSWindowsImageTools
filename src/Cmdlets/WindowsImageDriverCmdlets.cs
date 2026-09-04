@@ -54,4 +54,66 @@ namespace PSWindowsImageTools.Cmdlets
             }
         }
     }
+
+    /// <summary>
+    /// Removes a driver package from a mounted Windows image
+    /// </summary>
+    [Cmdlet(VerbsCommon.Remove, "WindowsImageDriver", SupportsShouldProcess = true)]
+    [OutputType(typeof(void))]
+    public class RemoveWindowsImageDriverCmdlet : PSCmdlet
+    {
+        private const string ComponentName = "Remove-WindowsImageDriver";
+        private readonly List<WindowsImageDriverInfo> _allDrivers = new List<WindowsImageDriverInfo>();
+
+        [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, HelpMessage = "Driver(s) to remove, from Get-WindowsImageDriver")]
+        [ValidateNotNull]
+        public WindowsImageDriverInfo[] Driver { get; set; } = Array.Empty<WindowsImageDriverInfo>();
+
+        [Parameter(HelpMessage = "Continue processing other drivers if one fails")]
+        public SwitchParameter ContinueOnError { get; set; }
+
+        protected override void ProcessRecord()
+        {
+            _allDrivers.AddRange(Driver);
+        }
+
+        protected override void EndProcessing()
+        {
+            if (_allDrivers.Count == 0)
+            {
+                LoggingService.WriteWarning(this, "No drivers provided for removal");
+                return;
+            }
+
+            using var imageService = WindowsImageService.ForCmdlet(this);
+
+            foreach (var driver in _allDrivers)
+            {
+                if (string.IsNullOrEmpty(driver.MountPath))
+                {
+                    LoggingService.WriteWarning(this, $"Driver {driver.PublishedName} has no mount path; skipping");
+                    continue;
+                }
+
+                if (!ShouldProcess($"{driver.PublishedName} ({driver.OriginalFileName}) on {driver.MountPath}", "Remove driver"))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    imageService.RemoveDriver(driver.MountPath, driver.PublishedName);
+                    LoggingService.WriteVerbose(this, $"Removed driver {driver.PublishedName} from {driver.MountPath}");
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.WriteError(this, ComponentName, $"Failed to remove driver {driver.PublishedName}: {ex.Message}", ex);
+                    if (!ContinueOnError.IsPresent)
+                    {
+                        throw;
+                    }
+                }
+            }
+        }
+    }
 }
