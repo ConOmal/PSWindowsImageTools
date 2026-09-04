@@ -91,9 +91,14 @@ namespace PSWindowsImageTools.Models
         public List<SnapshotItem> Drivers { get; set; } = new List<SnapshotItem>();
 
         /// <summary>
+        /// Drift-relevant registry values captured from the offline hives
+        /// </summary>
+        public List<RegistrySnapshotValue> Registry { get; set; } = new List<RegistrySnapshotValue>();
+
+        /// <summary>
         /// Total captured items
         /// </summary>
-        public int TotalItems => Packages.Count + Features.Count + Capabilities.Count + AppxPackages.Count + Software.Count + Drivers.Count;
+        public int TotalItems => Packages.Count + Features.Count + Capabilities.Count + AppxPackages.Count + Software.Count + Drivers.Count + Registry.Count;
 
         public override string ToString()
         {
@@ -156,6 +161,11 @@ namespace PSWindowsImageTools.Models
         /// Per-category differences
         /// </summary>
         public List<CategoryDifference> Categories { get; set; } = new List<CategoryDifference>();
+
+        /// <summary>
+        /// Registry drift (added / removed / changed per hive)
+        /// </summary>
+        public RegistryDriftResult? RegistryDrift { get; set; }
 
         /// <summary>
         /// Total differences across all categories

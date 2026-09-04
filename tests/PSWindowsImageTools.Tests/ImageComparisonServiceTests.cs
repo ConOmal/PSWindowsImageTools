@@ -57,6 +57,17 @@ namespace PSWindowsImageTools.Tests
                 {
                     new SnapshotItem { Name = "net.inf", State = "Acme", Detail = "1.0.0.0" }
                 },
+                Registry = new List<RegistrySnapshotValue>
+                {
+                    new RegistrySnapshotValue
+                    {
+                        Hive = "HKLM\\SOFTWARE",
+                        KeyPath = @"Microsoft\Windows\CurrentVersion\Run",
+                        ValueName = "Tool",
+                        ValueType = "REG_SZ",
+                        ValueData = "1.0.0"
+                    }
+                },
             };
 
             customize?.Invoke(snapshot);
@@ -139,6 +150,8 @@ namespace PSWindowsImageTools.Tests
             Assert.Equal("RoundTrip", loaded.ImageName);
             Assert.Equal(2, loaded.Packages.Count);
             Assert.Equal("Tool", loaded.Software.Single().Name);
+            Assert.Single(loaded.Registry);
+            Assert.Equal(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\Tool", loaded.Registry.Single().FullPath);
         }
 
         [Fact]
@@ -159,6 +172,59 @@ namespace PSWindowsImageTools.Tests
             var driversDiff = result.Categories.Single(c => c.Category == "Drivers");
             Assert.Single(driversDiff.Added);
             Assert.Equal("gpu.inf", driversDiff.Added[0].Name);
+        }
+
+        [Fact]
+        public void Compare_DetectsRegistryDriftPerHive()
+        {
+            var reference = MakeSnapshot("A");
+            var difference = MakeSnapshot("B", s =>
+            {
+                s.Registry.RemoveAll(v => v.ValueName == "Tool");
+                s.Registry.Add(new RegistrySnapshotValue
+                {
+                    Hive = "HKLM\\SOFTWARE",
+                    KeyPath = @"Microsoft\Windows\CurrentVersion\Policies\System",
+                    ValueName = "ConsentPromptBehaviorAdmin",
+                    ValueType = "REG_DWORD",
+                    ValueData = "1"
+                });
+                s.Registry.Add(Val("HKLM\\SOFTWARE", @"Microsoft\Windows\CurrentVersion\Run", "Tool", "REG_SZ", "2.0.0"));
+            });
+
+            var result = new ImageComparisonService().Compare(reference, difference);
+
+            Assert.NotNull(result.RegistryDrift);
+            Assert.False(result.AreIdentical);
+
+            var registry = result.Categories.Single(c => c.Category == "Registry");
+            Assert.Single(registry.Added);
+            Assert.Equal(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\ConsentPromptBehaviorAdmin", registry.Added[0].Name);
+            Assert.Single(registry.Changed);
+            Assert.Empty(registry.Removed);
+
+            var drift = result.RegistryDrift;
+            Assert.Single(drift.Hives);
+            Assert.Equal("HKLM\\SOFTWARE", drift.Hives[0].Hive);
+            Assert.Single(drift.Hives[0].Added);
+            Assert.Single(drift.Hives[0].Changed);
+            Assert.Equal("Tool", drift.Hives[0].Changed[0].ValueName);
+            Assert.Equal("1.0.0", drift.Hives[0].Changed[0].PreviousData);
+            Assert.Equal("2.0.0", drift.Hives[0].Changed[0].CurrentData);
+            Assert.Equal(2, drift.TotalDifferences);
+            Assert.Equal(2, result.TotalDifferences);
+        }
+
+        private static RegistrySnapshotValue Val(string hive, string keyPath, string valueName, string valueType = "REG_SZ", string valueData = "")
+        {
+            return new RegistrySnapshotValue
+            {
+                Hive = hive,
+                KeyPath = keyPath,
+                ValueName = valueName,
+                ValueType = valueType,
+                ValueData = valueData
+            };
         }
     }
 }

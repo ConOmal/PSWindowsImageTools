@@ -148,6 +148,16 @@ namespace PSWindowsImageTools.Services
                 _callbacks.Warning?.Invoke($"Failed to capture installed software: {ex.Message}");
             }
 
+            try
+            {
+                using var registryReader = new RegistryHiveReader(_callbacks);
+                snapshot.Registry.AddRange(new RegistryDriftService(_callbacks).CaptureDriftValues(registryReader, mountPath));
+            }
+            catch (Exception ex)
+            {
+                _callbacks.Warning?.Invoke($"Failed to capture registry drift: {ex.Message}");
+            }
+
             _callbacks.Verbose?.Invoke($"Snapshot captured: {snapshot.TotalItems} items");
             return snapshot;
         }
@@ -220,8 +230,33 @@ namespace PSWindowsImageTools.Services
             result.Categories.Add(CompareCategory("AppxPackages", reference.AppxPackages, difference.AppxPackages));
             result.Categories.Add(CompareCategory("Software", reference.Software, difference.Software));
             result.Categories.Add(CompareCategory("Drivers", reference.Drivers, difference.Drivers));
+            result.Categories.Add(CompareRegistryCategory(reference, difference));
+            result.RegistryDrift = RegistryDriftService.CompareRegistry(reference.ImageName, difference.ImageName, reference.Registry, difference.Registry);
 
             return result;
+        }
+
+        /// <summary>
+        /// Compares the registry category of two snapshots
+        /// </summary>
+        private static CategoryDifference CompareRegistryCategory(ImageSnapshot reference, ImageSnapshot difference)
+        {
+            return CompareCategory("Registry", MapRegistryItems(reference.Registry), MapRegistryItems(difference.Registry));
+        }
+
+        /// <summary>
+        /// Maps captured registry values to snapshot items (Name = full path, State = value type, Detail = value data)
+        /// </summary>
+        private static List<SnapshotItem> MapRegistryItems(IEnumerable<RegistrySnapshotValue> values)
+        {
+            return values
+                .Select(v => new SnapshotItem
+                {
+                    Name = v.FullPath,
+                    State = v.ValueType,
+                    Detail = v.ValueData
+                })
+                .ToList();
         }
 
         /// <summary>
