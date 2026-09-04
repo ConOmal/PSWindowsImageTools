@@ -153,6 +153,23 @@ namespace PSWindowsImageTools.Services
         }
 
         /// <summary>
+        /// Builds an SBOM report from a captured snapshot. Pure — no I/O.
+        /// </summary>
+        public SbomReport BuildSbom(ImageSnapshot snapshot)
+        {
+            return new SbomReport
+            {
+                ImageName = snapshot.ImageName,
+                ImagePath = snapshot.ImagePath,
+                Packages = snapshot.Packages,
+                Drivers = snapshot.Drivers,
+                Features = snapshot.Features,
+                Capabilities = snapshot.Capabilities,
+                Applications = snapshot.Software
+            };
+        }
+
+        /// <summary>
         /// Saves a snapshot to a JSON file
         /// </summary>
         /// <param name="snapshot">Snapshot to save</param>

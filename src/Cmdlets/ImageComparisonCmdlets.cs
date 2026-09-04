@@ -216,4 +216,82 @@ namespace PSWindowsImageTools.Cmdlets
             }
         }
     }
+
+    /// <summary>
+    /// Builds a Software Bill of Materials (SBOM) from a captured Windows image snapshot
+    /// </summary>
+    [Cmdlet(VerbsData.Export, "WindowsImageSBOM")]
+    [OutputType(typeof(SbomReport[]))]
+    public class ExportWindowsImageSBOMCmdlet : PSCmdlet
+    {
+        private const string ComponentName = "Export-WindowsImageSBOM";
+        private readonly List<ImageSnapshot> _allSnapshots = new List<ImageSnapshot>();
+
+        [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, ParameterSetName = "BySnapshot", HelpMessage = "Snapshot(s) from Get-WindowsImageSnapshot")]
+        [ValidateNotNull]
+        public ImageSnapshot[] Snapshot { get; set; } = Array.Empty<ImageSnapshot>();
+
+        [Parameter(Mandatory = true, ParameterSetName = "BySnapshotFile", HelpMessage = "Path to a saved snapshot JSON file")]
+        [ValidateNotNullOrEmpty]
+        public string SnapshotPath { get; set; } = null!;
+
+        [Parameter(Mandatory = true, Position = 1, HelpMessage = "Destination directory for the SBOM JSON file(s)")]
+        [ValidateNotNull]
+        public DirectoryInfo DestinationPath { get; set; } = null!;
+
+        protected override void ProcessRecord()
+        {
+            if (ParameterSetName == "BySnapshot")
+            {
+                _allSnapshots.AddRange(Snapshot);
+            }
+        }
+
+        protected override void EndProcessing()
+        {
+            if (ParameterSetName == "BySnapshotFile")
+            {
+                var resolvedPath = GetUnresolvedProviderPathFromPSPath(SnapshotPath) ?? SnapshotPath;
+                _allSnapshots.Add(ImageComparisonService.LoadSnapshot(resolvedPath));
+            }
+
+            if (_allSnapshots.Count == 0)
+            {
+                LoggingService.WriteWarning(this, "No snapshots provided for SBOM export");
+                return;
+            }
+
+            if (!DestinationPath.Exists)
+            {
+                DestinationPath.Create();
+            }
+
+            var comparisonService = new ImageComparisonService(ModuleCallbacks.FromCmdlet(this));
+            var reports = new List<SbomReport>();
+
+            foreach (var snapshot in _allSnapshots)
+            {
+                var sbom = comparisonService.BuildSbom(snapshot);
+                var fileName = $"sbom_{SanitizeFileName(snapshot.ImageName)}_{sbom.GeneratedAt:yyyyMMdd_HHmmss}.json";
+                var filePath = Path.Combine(DestinationPath.FullName, fileName);
+                var json = Newtonsoft.Json.JsonConvert.SerializeObject(sbom, Newtonsoft.Json.Formatting.Indented);
+                File.WriteAllText(filePath, json);
+
+                LoggingService.WriteVerbose(this, ComponentName, $"SBOM exported: {filePath}");
+                reports.Add(sbom);
+            }
+
+            WriteObject(reports.ToArray());
+        }
+
+        private static string SanitizeFileName(string name)
+        {
+            foreach (var c in Path.GetInvalidFileNameChars())
+            {
+                name = name.Replace(c, '_');
+            }
+
+            return name.Length > 60 ? name.Substring(0, 60) : name;
+        }
+    }
 }

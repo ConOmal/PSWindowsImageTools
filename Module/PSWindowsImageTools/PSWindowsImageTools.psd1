@@ -120,6 +120,7 @@
         # Image Diffing
         'Get-WindowsImageSnapshot',
         'Compare-WindowsImage',
+        'Export-WindowsImageSBOM',
 
 
 
