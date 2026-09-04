@@ -71,14 +71,14 @@ Write-Output "Check 2: $paramDrift parameter drift issues"
 
 # --- Check 3: New-ExternalHelp round-trip compiles ---
 if (-not $SkipCompile) {
-    $platyPS = $null
+    $psd1 = $null
     if ($PlatyPSPath -and (Test-Path $PlatyPSPath)) {
-        $platyPS = Get-ChildItem $PlatyPSPath -Recurse -Filter "platyPS.psd1" | Select-Object -First 1
+        $psd1 = Get-ChildItem $PlatyPSPath -Recurse -Filter "platyPS.psd1" | Select-Object -First 1 -ExpandProperty FullName
     } else {
-        $platyPS = Get-Module platyPS -ListAvailable | Select-Object -First 1
+        $psd1 = (Get-Module -Name platyPS -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Path
     }
-    if ($platyPS) {
-        Import-Module $platyPS.FullName -Force
+    if ($psd1) {
+        Import-Module $psd1 -Force
         $tempOut = Join-Path ([System.IO.Path]::GetTempPath()) "PSWIT-verify-help-$([guid]::NewGuid().ToString('N'))"
         New-Item -ItemType Directory -Path $tempOut | Out-Null
         try {
