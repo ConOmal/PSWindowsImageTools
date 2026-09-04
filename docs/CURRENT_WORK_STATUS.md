@@ -1,5 +1,11 @@
 # Current Work Status
 
+## Release State
+- **v2025.09.04.1 tagged and released** at https://github.com/ConOmal/PSWindowsImageTools/releases/tag/v2025.09.04.1
+  (fork; the stored credentials lack push access to upstream Grace-Solutions)
+- CI green on the release commit: build + 99 tests + help-coverage guardrail all pass on windows-latest
+- Upstream repo `origin` retained for history; `fork` remote points at the publish target
+
 ## Completed
 
 ### Phase 0 — Baseline & Safety Net
