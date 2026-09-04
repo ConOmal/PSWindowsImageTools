@@ -160,3 +160,18 @@ Fix the PSWindowsImageTools integration test suite (Phase A3) so all 10 tests pa
   suite on windows-latest (healthy DISM host: admin ✓, non-Store pwsh ✓, DismHost works) with the
   freshly-built DLL synced into the module; finally exercises the 10 tests that are env-blocked on
   this machine. README: PSGallery install section added (Install-Module PSWindowsImageTools).
+- **First CI integration run (run 33919999649) delivered real signal**:
+  1. `ProcessMonitoringService` **crash root cause captured and fixed** (the 0xE0434352): the
+     monitoring worker thread called `cmdlet.WriteVerbose/WriteProgress` — thread-affine APIs —
+     and when the pipeline stopped (preceding DismException), the late write threw
+     PSInvalidOperationException on the thread → host crash. Fixed with SafeWrite* guards in
+     `MonitorProcess`/`GetProcessInfo` (catch InvalidOperationException; PSInvalidOperationException
+     derives from it). This was NOT environment-specific — it reproduces on healthy hosts.
+  2. Synthetic-image limitation confirmed on a healthy host: servicing queries
+     (packages/features/capabilities/AppX/component store) fail with "Verify that DISM is installed
+     properly in the image" — the fake layout has no CBS. Suite now probes capabilities once
+     (`HasServicingStack`/`HasDriverStore`) and skips the 10 servicing/driver-store-dependent tests
+     with `-Skip:`; health check left unskipped (degrades by design). Local: 7 pass/10 skip/1 fail
+     (health check fails only on this machine's broken servicing — runner verdict pending).
+  3. On the runner before the fixes: 7 passed (discovery 2, lifecycle 2, error contracts 3) in
+     ~1-2s each, then snapshot/recipe/component-store failures + the crash mid-suite.

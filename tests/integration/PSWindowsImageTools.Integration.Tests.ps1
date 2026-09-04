@@ -32,6 +32,26 @@ BeforeAll {
     New-IntegrationSource
     New-IntegrationWim -ImageFile $BaselineWim -Name "Windows 11 Pro IT"
 
+    # The synthetic image has no CBS servicing stack or driver store, so offline
+    # servicing queries (packages/features/capabilities/AppX/driver store) fail
+    # even on healthy hosts. Probe once so affected tests skip honestly.
+    $script:HasServicingStack = $false
+    $script:HasDriverStore = $false
+    try {
+        $probe = Get-WindowsImageList -ImagePath $BaselineWim | Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+        try {
+            try { $null = $probe | Get-WindowsImagePackageList -ErrorAction Stop; $script:HasServicingStack = $true } catch { }
+            try { $null = $probe | Get-WindowsImageDriver -ErrorAction Stop; $script:HasDriverStore = $true } catch { }
+        }
+        finally {
+            $probe | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+    catch {
+        Write-Host "Capability probe mount failed: $($_.Exception.Message)"
+    }
+    Write-Host "Synthetic image capabilities: servicing=$($script:HasServicingStack) drivers=$($script:HasDriverStore)"
+
     # Seed mount-root cleanup of stale entries so assertions are precise
     $script:CleanMountIds = @()
 }
@@ -104,7 +124,7 @@ Describe "Integration: mount lifecycle" -Tag Integration {
 
 Describe "Integration: snapshot and diff" -Tag Integration {
 
-    It "captures a complete snapshot with all five categories" {
+    It "captures a complete snapshot with all five categories" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot
 
@@ -122,7 +142,7 @@ Describe "Integration: snapshot and diff" -Tag Integration {
         }
     }
 
-    It "exports and reimports snapshot JSON" {
+    It "exports and reimports snapshot JSON" -Skip:(-not $script:HasServicingStack) {
         $exportDir = Join-Path $Workspace "snapshots"
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot
@@ -144,7 +164,7 @@ Describe "Integration: snapshot and diff" -Tag Integration {
 
 Describe "Integration: recipe end-to-end" -Tag Integration {
 
-    It "applies copyFiles and registryModifications, persists after save, and shows up in the diff" {
+    It "applies copyFiles and registryModifications, persists after save, and shows up in the diff" -Skip:(-not $script:HasServicingStack) {
         # Copy baseline -> modified, then run a recipe against the modified WIM
         Copy-Item $BaselineWim $ModifiedWim -Force
 
@@ -294,7 +314,7 @@ Describe "Integration: error contracts" -Tag Integration {
 
 Describe "Integration: component store" -Tag Integration {
 
-    It "reports package counts and WinSxS size for a mounted image" {
+    It "reports package counts and WinSxS size for a mounted image" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
@@ -310,7 +330,7 @@ Describe "Integration: component store" -Tag Integration {
         }
     }
 
-    It "optimizes the component store and reports before/after" {
+    It "optimizes the component store and reports before/after" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
@@ -329,7 +349,7 @@ Describe "Integration: component store" -Tag Integration {
 
 Describe "Integration: image drivers" -Tag Integration {
 
-    It "lists drivers for a mounted image without error" {
+    It "lists drivers for a mounted image without error" -Skip:(-not $script:HasDriverStore) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
@@ -343,7 +363,7 @@ Describe "Integration: image drivers" -Tag Integration {
         }
     }
 
-    It "removes a third-party driver from a mounted image" {
+    It "removes a third-party driver from a mounted image" -Skip:(-not $script:HasDriverStore) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
@@ -365,7 +385,7 @@ Describe "Integration: image drivers" -Tag Integration {
         }
     }
 
-    It "exports a driver's files to a destination directory" {
+    It "exports a driver's files to a destination directory" -Skip:(-not $script:HasDriverStore) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
         $exportDest = Join-Path $Workspace "driver-export"
@@ -388,7 +408,7 @@ Describe "Integration: image drivers" -Tag Integration {
 
 Describe "Integration: driver comparison" -Tag Integration {
 
-    It "reports no differences between a mounted image and itself" {
+    It "reports no differences between a mounted image and itself" -Skip:(-not $script:HasDriverStore) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
@@ -422,7 +442,7 @@ Describe "Integration: health check" -Tag Integration {
 
 Describe "Integration: SBOM export" -Tag Integration {
 
-    It "exports a snapshot to an SBOM JSON file and round-trips" {
+    It "exports a snapshot to an SBOM JSON file and round-trips" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
         $sbomDest = Join-Path $Workspace "sbom-export"

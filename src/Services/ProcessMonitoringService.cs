@@ -162,8 +162,8 @@ namespace PSWindowsImageTools.Services
                 var elapsedMinutes = elapsed.TotalMinutes;
 
                 // Calculate progress percentage (if timeout is set)
-                var progressPercentage = timeoutMinutes > 0 
-                    ? Math.Min((int)(elapsedMinutes / timeoutMinutes * 100), 99) 
+                var progressPercentage = timeoutMinutes > 0
+                    ? Math.Min((int)(elapsedMinutes / timeoutMinutes * 100), 99)
                     : (int)(elapsedMinutes % 100); // Cycle 0-99 if no timeout
 
                 // Update progress every interval
@@ -173,12 +173,12 @@ namespace PSWindowsImageTools.Services
                         ? $"PID {processId} running for {elapsed.TotalMinutes:F1} minutes (timeout: {timeoutMinutes} min)"
                         : $"PID {processId} running for {elapsed.TotalMinutes:F1} minutes";
 
-                    LoggingService.WriteProgress(cmdlet, progressTitle,
+                    SafeWriteProgress(cmdlet, progressTitle,
                         progressDescription,
                         statusMessage,
                         progressPercentage);
 
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, 
+                    SafeWriteVerbose(cmdlet, ServiceName,
                         $"Process {processId} status: Running for {elapsed.TotalMinutes:F1} minutes");
 
                     lastUpdateTime = currentTime;
@@ -187,7 +187,7 @@ namespace PSWindowsImageTools.Services
                 // Check if we should show command line periodically (every 60 seconds)
                 if (elapsed.TotalSeconds % 60 < updateIntervalSeconds)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, 
+                    SafeWriteVerbose(cmdlet, ServiceName,
                         $"Command line: {commandLine}");
                 }
 
@@ -199,10 +199,62 @@ namespace PSWindowsImageTools.Services
             var finalElapsed = DateTime.UtcNow - startTime;
             var exitCode = process.ExitCode;
 
-            LoggingService.WriteProgress(cmdlet, progressTitle,
+            SafeWriteProgress(cmdlet, progressTitle,
                 "Process completed",
                 $"PID {processId} finished after {finalElapsed.TotalMinutes:F1} minutes with exit code {exitCode}",
                 100);
+        }
+
+        /// <summary>
+        /// Writes progress from the monitoring thread. Cmdlet write APIs are thread-affine:
+        /// once the pipeline has stopped, calls from a worker thread throw
+        /// PSInvalidOperationException, which would crash the host if left unhandled.
+        /// </summary>
+        private static void SafeWriteProgress(PSCmdlet? cmdlet, string activity, string description, string status, int percent)
+        {
+            if (cmdlet == null) return;
+            try
+            {
+                LoggingService.WriteProgress(cmdlet, activity, description, status, percent);
+            }
+            catch (InvalidOperationException)
+            {
+                // Pipeline no longer accepting writes; monitoring output is moot.
+            }
+        }
+
+        /// <summary>
+        /// Thread-safe counterpart to LoggingService.WriteVerbose for calls made
+        /// outside the cmdlet's pipeline thread. See SafeWriteProgress.
+        /// </summary>
+        private static void SafeWriteVerbose(PSCmdlet? cmdlet, string component, string message)
+        {
+            if (cmdlet == null) return;
+            try
+            {
+                LoggingService.WriteVerbose(cmdlet, component, message);
+            }
+            catch (InvalidOperationException)
+            {
+                // Pipeline no longer accepting writes; monitoring output is moot.
+            }
+        }
+
+        /// <summary>
+        /// Thread-safe counterpart to LoggingService.WriteWarning for calls made
+        /// outside the cmdlet's pipeline thread. See SafeWriteProgress.
+        /// </summary>
+        private static void SafeWriteWarning(PSCmdlet? cmdlet, string component, string message)
+        {
+            if (cmdlet == null) return;
+            try
+            {
+                LoggingService.WriteWarning(cmdlet, component, message);
+            }
+            catch (InvalidOperationException)
+            {
+                // Pipeline no longer accepting writes; monitoring output is moot.
+            }
         }
 
 
@@ -233,13 +285,13 @@ namespace PSWindowsImageTools.Services
             catch (ArgumentException)
             {
                 // Process not found
-                LoggingService.WriteVerbose(cmdlet, ServiceName, 
+                SafeWriteVerbose(cmdlet, ServiceName,
                     $"Process {processId} not found or has exited");
                 return null;
             }
             catch (Exception ex)
             {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
+                SafeWriteWarning(cmdlet, ServiceName,
                     $"Failed to get process info for PID {processId}: {ex.Message}");
                 return null;
             }
