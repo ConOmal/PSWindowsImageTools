@@ -153,3 +153,10 @@ Fix the PSWindowsImageTools integration test suite (Phase A3) so all 10 tests pa
 - Post-release: CI on merged main `2ad3294` → completed success. GitHub Release object created for
   v2026.09.04.1 with notes (highlights, fixes, gallery install) — the workflow publishes to
   PSGallery but does not create the release page, matching the v2025.09.04.1 precedent.
+- **Deferred by user**: module rename to `PSISOWIMTools` (work started in a worktree, rolled back
+  clean — only staged renames, nothing committed/pushed/published). Full scoped plan recorded in
+  docs/CURRENT_WORK_STATUS.md under "Deferred". Remember: PSGallery renames = publish a new package.
+- Follow-up: added `integration` job to ci.yml (workflow_dispatch + push-to-main) — runs the 17-test
+  suite on windows-latest (healthy DISM host: admin ✓, non-Store pwsh ✓, DismHost works) with the
+  freshly-built DLL synced into the module; finally exercises the 10 tests that are env-blocked on
+  this machine. README: PSGallery install section added (Install-Module PSWindowsImageTools).

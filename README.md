@@ -278,6 +278,18 @@ $mounted | Dismount-WindowsImageList -Save
 - DISM tools (included with Windows)
 
 ### **Installation**
+
+**From the PowerShell Gallery** (recommended):
+```powershell
+# Install (PowerShell 5.1+ / 7+, admin recommended for DISM operations)
+Install-Module PSWindowsImageTools -Scope CurrentUser
+
+# Import and verify
+Import-Module PSWindowsImageTools
+Get-Command -Module PSWindowsImageTools
+```
+
+**From source**:
 ```powershell
 # Clone repository
 git clone https://github.com/Grace-Solutions/PSWindowsImageTools.git
