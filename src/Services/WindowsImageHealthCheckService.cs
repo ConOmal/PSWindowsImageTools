@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Management.Automation;
 using Microsoft.Dism;
 using PSWindowsImageTools.Models;
 
@@ -22,7 +21,7 @@ namespace PSWindowsImageTools.Services
             _callbacks = callbacks ?? ModuleCallbacks.Silent;
         }
 
-        public HealthCheckReport Run(MountedWindowsImage mountedImage, IWindowsImageService imageService, bool restoreHealth, PSCmdlet cmdlet)
+        public HealthCheckReport Run(MountedWindowsImage mountedImage, IWindowsImageService imageService, bool restoreHealth)
         {
             if (mountedImage.MountPath == null)
             {
@@ -120,6 +119,12 @@ namespace PSWindowsImageTools.Services
             catch (Exception ex)
             {
                 _callbacks.Warning?.Invoke($"Failed to check component store: {ex.Message}");
+                report.Findings.Add(new HealthFinding
+                {
+                    Category = "OrphanedOrSupersededPackage",
+                    Severity = HealthStatus.Warning,
+                    Message = $"Component store check failed: {ex.Message}"
+                });
             }
         }
 
@@ -157,6 +162,12 @@ namespace PSWindowsImageTools.Services
             catch (Exception ex)
             {
                 _callbacks.Warning?.Invoke($"Failed to check drivers: {ex.Message}");
+                report.Findings.Add(new HealthFinding
+                {
+                    Category = "DriverIssue",
+                    Severity = HealthStatus.Warning,
+                    Message = $"Driver check failed: {ex.Message}"
+                });
             }
         }
     }

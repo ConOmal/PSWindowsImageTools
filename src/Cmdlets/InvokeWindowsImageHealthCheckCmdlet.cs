@@ -9,7 +9,7 @@ namespace PSWindowsImageTools.Cmdlets
     /// <summary>
     /// Runs a composite health check against one or more mounted Windows images
     /// </summary>
-    [Cmdlet(VerbsLifecycle.Invoke, "WindowsImageHealthCheck")]
+    [Cmdlet(VerbsLifecycle.Invoke, "WindowsImageHealthCheck", SupportsShouldProcess = true)]
     [OutputType(typeof(HealthCheckReport[]))]
     public class InvokeWindowsImageHealthCheckCmdlet : PSCmdlet
     {
@@ -45,9 +45,19 @@ namespace PSWindowsImageTools.Cmdlets
 
             foreach (var mountedImage in _allMountedImages)
             {
+                var effectiveRestoreHealth = RestoreHealth.IsPresent;
+                if (effectiveRestoreHealth)
+                {
+                    var target = mountedImage.MountPath?.FullName ?? mountedImage.ImageName;
+                    if (!ShouldProcess(target, "Restore image health (repair corruption)"))
+                    {
+                        effectiveRestoreHealth = false;
+                    }
+                }
+
                 try
                 {
-                    results.Add(healthCheckService.Run(mountedImage, imageService, RestoreHealth.IsPresent, this));
+                    results.Add(healthCheckService.Run(mountedImage, imageService, effectiveRestoreHealth));
                 }
                 catch (Exception ex)
                 {
