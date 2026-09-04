@@ -112,6 +112,24 @@ namespace PSWindowsImageTools.Services
 
             try
             {
+                var driverService = new WindowsImageDriverService(_callbacks);
+                foreach (var driver in driverService.GetDrivers(mountedImage, imageService))
+                {
+                    snapshot.Drivers.Add(new SnapshotItem
+                    {
+                        Name = driver.OriginalFileName,
+                        State = driver.ProviderName,
+                        Detail = driver.Version
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _callbacks.Warning?.Invoke($"Failed to capture drivers: {ex.Message}");
+            }
+
+            try
+            {
                 using var registryReader = new RegistryHiveReader(_callbacks);
                 var softwareHivePath = RegistryHiveReader.GetSoftwareHivePath(mountPath);
 
@@ -184,6 +202,7 @@ namespace PSWindowsImageTools.Services
             result.Categories.Add(CompareCategory("Capabilities", reference.Capabilities, difference.Capabilities));
             result.Categories.Add(CompareCategory("AppxPackages", reference.AppxPackages, difference.AppxPackages));
             result.Categories.Add(CompareCategory("Software", reference.Software, difference.Software));
+            result.Categories.Add(CompareCategory("Drivers", reference.Drivers, difference.Drivers));
 
             return result;
         }

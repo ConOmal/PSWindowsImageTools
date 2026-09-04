@@ -86,9 +86,14 @@ namespace PSWindowsImageTools.Models
         public List<SnapshotItem> Software { get; set; } = new List<SnapshotItem>();
 
         /// <summary>
+        /// Driver packages present in the image
+        /// </summary>
+        public List<SnapshotItem> Drivers { get; set; } = new List<SnapshotItem>();
+
+        /// <summary>
         /// Total captured items
         /// </summary>
-        public int TotalItems => Packages.Count + Features.Count + Capabilities.Count + AppxPackages.Count + Software.Count;
+        public int TotalItems => Packages.Count + Features.Count + Capabilities.Count + AppxPackages.Count + Software.Count + Drivers.Count;
 
         public override string ToString()
         {
