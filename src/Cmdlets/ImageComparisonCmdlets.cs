@@ -252,7 +252,15 @@ namespace PSWindowsImageTools.Cmdlets
             if (ParameterSetName == "BySnapshotFile")
             {
                 var resolvedPath = GetUnresolvedProviderPathFromPSPath(SnapshotPath) ?? SnapshotPath;
-                _allSnapshots.Add(ImageComparisonService.LoadSnapshot(resolvedPath));
+                try
+                {
+                    _allSnapshots.Add(ImageComparisonService.LoadSnapshot(resolvedPath));
+                }
+                catch (Exception ex)
+                {
+                    ThrowTerminatingError(new ErrorRecord(ex, "LoadSnapshotFailed", ErrorCategory.ReadError, resolvedPath));
+                    return;
+                }
             }
 
             if (_allSnapshots.Count == 0)
@@ -271,14 +279,21 @@ namespace PSWindowsImageTools.Cmdlets
 
             foreach (var snapshot in _allSnapshots)
             {
-                var sbom = comparisonService.BuildSbom(snapshot);
-                var fileName = $"sbom_{SanitizeFileName(snapshot.ImageName)}_{sbom.GeneratedAt:yyyyMMdd_HHmmss}.json";
-                var filePath = Path.Combine(DestinationPath.FullName, fileName);
-                var json = Newtonsoft.Json.JsonConvert.SerializeObject(sbom, Newtonsoft.Json.Formatting.Indented);
-                File.WriteAllText(filePath, json);
+                try
+                {
+                    var sbom = comparisonService.BuildSbom(snapshot);
+                    var fileName = $"sbom_{SanitizeFileName(snapshot.ImageName)}_{sbom.GeneratedAt:yyyyMMdd_HHmmss}.json";
+                    var filePath = Path.Combine(DestinationPath.FullName, fileName);
+                    var json = Newtonsoft.Json.JsonConvert.SerializeObject(sbom, Newtonsoft.Json.Formatting.Indented);
+                    File.WriteAllText(filePath, json);
 
-                LoggingService.WriteVerbose(this, ComponentName, $"SBOM exported: {filePath}");
-                reports.Add(sbom);
+                    LoggingService.WriteVerbose(this, ComponentName, $"SBOM exported: {filePath}");
+                    reports.Add(sbom);
+                }
+                catch (Exception ex)
+                {
+                    WriteWarning($"Failed to export SBOM for {snapshot.ImageName}: {ex.Message}");
+                }
             }
 
             WriteObject(reports.ToArray());
