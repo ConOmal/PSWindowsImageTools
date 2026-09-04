@@ -116,4 +116,59 @@ namespace PSWindowsImageTools.Cmdlets
             }
         }
     }
+
+    /// <summary>
+    /// Compares driver packages between two mounted Windows images
+    /// </summary>
+    [Cmdlet(VerbsData.Compare, "WindowsImageDriver")]
+    [OutputType(typeof(DriverComparisonResult))]
+    public class CompareWindowsImageDriverCmdlet : PSCmdlet
+    {
+        private const string ComponentName = "Compare-WindowsImageDriver";
+        private readonly List<MountedWindowsImage> _allMountedImages = new List<MountedWindowsImage>();
+
+        [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, HelpMessage = "Two mounted images: first is the reference, second is current")]
+        [ValidateNotNull]
+        public MountedWindowsImage[] MountedImages { get; set; } = Array.Empty<MountedWindowsImage>();
+
+        [Parameter(HelpMessage = "Include inbox (Windows-provided) drivers, not just third-party")]
+        public SwitchParameter All { get; set; }
+
+        protected override void ProcessRecord()
+        {
+            _allMountedImages.AddRange(MountedImages);
+        }
+
+        protected override void EndProcessing()
+        {
+            if (_allMountedImages.Count != 2)
+            {
+                ThrowTerminatingError(new ErrorRecord(
+                    new InvalidOperationException($"Compare-WindowsImageDriver requires exactly two mounted images, got {_allMountedImages.Count}"),
+                    "InvalidImageCount",
+                    ErrorCategory.InvalidArgument,
+                    _allMountedImages.Count));
+                return;
+            }
+
+            using var imageService = WindowsImageService.ForCmdlet(this);
+            var driverService = new WindowsImageDriverService(ModuleCallbacks.FromCmdlet(this));
+
+            try
+            {
+                var reference = driverService.GetDrivers(_allMountedImages[0], imageService, All.IsPresent);
+                var current = driverService.GetDrivers(_allMountedImages[1], imageService, All.IsPresent);
+
+                var result = driverService.Compare(reference, current);
+                result.ReferenceName = _allMountedImages[0].ImageName;
+                result.CurrentName = _allMountedImages[1].ImageName;
+
+                WriteObject(result);
+            }
+            catch (Exception ex)
+            {
+                ThrowTerminatingError(new ErrorRecord(ex, "CompareWindowsImageDriverFailed", ErrorCategory.OperationStopped, ComponentName));
+            }
+        }
+    }
 }

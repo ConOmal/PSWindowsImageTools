@@ -364,3 +364,20 @@ Describe "Integration: image drivers" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: driver comparison" -Tag Integration {
+
+    It "reports no differences between a mounted image and itself" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $result = Compare-WindowsImageDriver -MountedImages @($mounted, $mounted)
+            $result.Added | Should -BeNullOrEmpty
+            $result.Removed | Should -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
