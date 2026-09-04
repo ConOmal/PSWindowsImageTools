@@ -8,6 +8,10 @@
 - First public release **v2025.09.04.1 is live on PSGallery** (54 cmdlets); v2026.09.04.1 published
   via the `release.yml` workflow using the `PSGALLERY_API_KEY` fork secret
 - CI green on the release commit: build + 176 tests + help-coverage guardrail all pass on windows-latest
+- **CI now runs the integration suite on every push to main** (`integration` job): 7 passed /
+  11 honest-skips on the synthetic image (CBS-less); real-servicing coverage comes from the
+  manual-dispatch `integration-real` job, which VSS-captures the runner's own OS as a real baseline
+  WIM (cached per runner-image version) and runs all 17 tests against it
 - Upstream repo `origin` retained for history; `fork` remote points at the publish target
 
 ## Deferred
@@ -22,6 +26,30 @@
   Keep cmdlet noun names unchanged. GitHub repo name stays unless separately requested.
 
 ## Completed
+
+### Phase 5 — Registry Drift Detection + TODO Closure (2026-09-04)
+- **Registry drift phase** (first backlog phase from the phase-1 spec): `Get-WindowsImageSnapshot`
+  now captures a defined drift-relevant registry key set (Run/RunOnce, Policies, WindowsUpdate,
+  Winlogon, Uninstall native+WOW64, Services, ComputerName/Session Manager/Lsa/Environment/Tcpip/
+  Terminal Server) from offline hives via the in-memory `RegistryHiveReader` (no mounting), and
+  `Compare-WindowsImage` reports per-hive added/removed/changed registry drift that feeds
+  `TotalDifferences`/`AreIdentical`. Registry data round-trips through the snapshot JSON export.
+  Spec: `docs/superpowers/specs/2026-09-04-registry-drift-detection-design.md`; plan:
+  `docs/superpowers/plans/2026-09-04-registry-drift-detection.md` (17/17 steps).
+- **TODO closure**: `FormatUtilityService.NormalizeWindowsVersion` now handles future kernel
+  versions (major > 10 preserved as authoritative, 3-part padded to 4-part); the dead
+  `NativeRegistryService.ModifyOfflineRegistry` stub is implemented via conversion to
+  `RegistryOperation[]` delegating to the proven `ApplyRegistryOperations` hive-mounted write path.
+- Unit tests now **226/226** (was 176); help guardrail green (62 cmdlets, MAML in sync);
+  build 0 warnings/0 errors.
+
+### Plan Checkbox Hygiene (2026-09-04)
+- Both implementation plans verified against the code and marked complete:
+  `docs/superpowers/plans/2026-09-03-windows11-iso-servicing.md` (53/53 steps) and
+  `docs/superpowers/plans/2026-09-04-phase1-component-store-drivers-inventory-validation.md`
+  (82/82 steps). All artifacts exist and all cmdlets are exported; two ISO-plan file names
+  deviated from the plan as implemented (`NewWindowsImageISOCmdlet.cs` vs `NewWindowsISOCmdlet.cs`,
+  `WindowsISODownloadUrlBuilder.cs` vs `WindowsISODownloadParser.cs`).
 
 ### Phase 0 — Baseline & Safety Net
 - Solution builds clean (0 warnings); package downgrade fixed (`System.Runtime.CompilerServices.Unsafe` 6.1.2)

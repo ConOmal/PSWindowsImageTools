@@ -150,7 +150,19 @@ jobs:
         run: Copy-Item Artifacts/bin/PSWindowsImageTools.dll Module/PSWindowsImageTools/bin/PSWindowsImageTools.dll -Force
         shell: pwsh
 
+      - name: Resolve runner image version for the cache key
+        run: Add-Content $env:GITHUB_ENV "IMAGE_VERSION=$env:ImageVersion"
+        shell: pwsh
+
+      - name: Restore cached baseline WIM
+        id: wim-cache
+        uses: actions/cache@v4
+        with:
+          path: C:\PSWIT-real.wim
+          key: pswit-baseline-wim-${{ env.IMAGE_VERSION }}
+
       - name: Capture runner OS as the baseline WIM
+        if: steps.wim-cache.outputs.cache-hit != 'true'
         run: |
           $exclusionLines = @(
             '[ExclusionList]',
@@ -158,6 +170,11 @@ jobs:
             '\swapfile.sys',
             '\hiberfil.sys',
             '\PSWIT-real.wim',
+            '\hostedtoolcache',
+            '\ProgramData\chocolatey',
+            '\ProgramData\Package Cache',
+            '\ProgramData\Microsoft\Windows\WER',
+            '\Windows\Logs',
             '\Windows\Temp',
             '\Windows\SoftwareDistribution',
             '\Users\runneradmin\AppData\Local\Temp'
