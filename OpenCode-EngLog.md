@@ -175,3 +175,16 @@ Fix the PSWindowsImageTools integration test suite (Phase A3) so all 10 tests pa
      (health check fails only on this machine's broken servicing — runner verdict pending).
   3. On the runner before the fixes: 7 passed (discovery 2, lifecycle 2, error contracts 3) in
      ~1-2s each, then snapshot/recipe/component-store failures + the crash mid-suite.
+- **CI integration job now green** (run 33921246317: both jobs success): 7 passed / 11 skipped /
+  0 failed on windows-latest. Two additional fixes along the way:
+  1. **Pester PassThru gotcha**: `Invoke-Pester -Configuration $cfg` returns NULL unless
+     `$cfg.Run.PassThru = $true` — the original exit gate read `$null.FailedCount -gt 0` → 0, so a
+     failing suite reported step success. Fixed in ci.yml and run-integration.ps1 (verified locally:
+     Run object with FailedCount; gate exits 1 on failure).
+  2. Health check test added to the servicing-skip list: on CBS-less images the health-check cmdlet
+     escalates (`$ErrorActionPreference=Stop` design) and no report is produced — even on healthy
+     hosts. Honest skip; runs fully against a real image.
+- Remaining true gap for full-suite coverage: the synthetic image lacks CBS + driver store. Options
+  for later: support a `-RealWim` parameter in run-integration.ps1 to point at a real install.wim
+  (CI runners can't easily host one; a self-hosted runner or an artifact-cached small real WIM
+  would work).

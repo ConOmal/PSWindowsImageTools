@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
+    inputs:
+      real_image:
+        description: 'Also run the integration suite against a real OS image captured from the runner (slow, ~1h)'
+        type: boolean
+        default: false
 
 jobs:
   build-and-test:
@@ -116,4 +121,84 @@ jobs:
         with:
           name: integration-results
           path: ./TestResults/integration-results.xml
+          if-no-files-found: warn
+
+  integration-real:
+    # Full servicing surface: captures the runner's own OS (real CBS + driver
+    # store) as the baseline WIM, named to match the suite's expectations, and
+    # runs every integration test against it. Manual dispatch only.
+    runs-on: windows-latest
+    timeout-minutes: 150
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.real_image == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore and build module
+        run: |
+          dotnet restore src/PSWindowsImageTools.csproj
+          dotnet build src/PSWindowsImageTools.csproj --no-restore --nologo
+        shell: pwsh
+
+      - name: Sync fresh binary into the module
+        run: Copy-Item Artifacts/bin/PSWindowsImageTools.dll Module/PSWindowsImageTools/bin/PSWindowsImageTools.dll -Force
+        shell: pwsh
+
+      - name: Capture runner OS as the baseline WIM
+        run: |
+          $exclusions = @'
+[ExclusionList]
+\pagefile.sys
+\swapfile.sys
+\hiberfil.sys
+\PSWIT-real.wim
+\Windows\Temp
+\Windows\SoftwareDistribution
+\Users\runneradmin\AppData\Local\Temp
+'@
+          Set-Content -Path C:\PSWIT-exclusions.ini -Value $exclusions -Encoding ascii
+          dism /Capture-Image /ImageFile:C:\PSWIT-real.wim /CaptureDir:C:\ /Name:"Windows 11 Pro IT" /Compress:max /ConfigFile:C:\PSWIT-exclusions.ini
+          if ($LASTEXITCODE -ne 0) { throw "DISM capture failed (exit $LASTEXITCODE)" }
+          "Captured baseline: {0:N2} GB" -f ((Get-Item C:\PSWIT-real.wim).Length / 1GB)
+        shell: pwsh
+
+      - name: Ensure Pester 5
+        run: |
+          $pester = Get-Module Pester -ListAvailable | Where-Object { $_.Version.Major -ge 5 } | Select-Object -First 1
+          if (-not $pester) {
+            Save-Module Pester -Path "$env:RUNNER_TEMP\pester" -RequiredVersion 5.7.1
+            $pesterPath = Get-ChildItem "$env:RUNNER_TEMP\pester" -Recurse -Filter Pester.psd1 | Select-Object -First 1
+            Import-Module $pesterPath.FullName -Force
+          }
+          else { Import-Module $pester.Path -Force }
+          Write-Output "Pester $((Get-Module Pester).Version) ready"
+        shell: pwsh
+
+      - name: Run integration suite against the real image
+        env:
+          PSWIT_IT_WIM: 'C:\PSWIT-real.wim'
+        run: |
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './tests/integration'
+          $cfg.Run.PassThru = $true
+          $cfg.Filter.Tag = 'Integration'
+          $cfg.Output.Verbosity = 'Detailed'
+          $cfg.TestResult.Enabled = $true
+          $cfg.TestResult.OutputPath = './TestResults/integration-real-results.xml'
+          $run = Invoke-Pester -Configuration $cfg
+          exit [int]($run.FailedCount -gt 0)
+        shell: pwsh
+
+      - name: Upload real-image integration results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-real-results
+          path: ./TestResults/integration-real-results.xml
           if-no-files-found: warn

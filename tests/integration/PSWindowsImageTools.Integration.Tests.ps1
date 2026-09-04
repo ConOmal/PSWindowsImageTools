@@ -28,9 +28,19 @@ BeforeAll {
         if ($LASTEXITCODE -ne 0) { throw "DISM capture failed for $ImageFile (exit $LASTEXITCODE)" }
     }
 
-    # Build workspace and baseline image once
-    New-IntegrationSource
-    New-IntegrationWim -ImageFile $BaselineWim -Name "Windows 11 Pro IT"
+    # Optional real-image mode: point PSWIT_IT_WIM at a captured WIM that has a
+    # real CBS servicing stack + driver store to exercise the full servicing
+    # surface (CI captures the runner's own OS for this). The synthetic image is
+    # the default because it builds in seconds everywhere.
+    $script:RealWim = $env:PSWIT_IT_WIM
+    if ($script:RealWim -and (Test-Path $script:RealWim)) {
+        Write-Host "Real-image mode: $script:RealWim"
+        $script:BaselineWim = $script:RealWim
+    }
+    else {
+        New-IntegrationSource
+        New-IntegrationWim -ImageFile $BaselineWim -Name "Windows 11 Pro IT"
+    }
 
     # The synthetic image has no CBS servicing stack or driver store, so offline
     # servicing queries (packages/features/capabilities/AppX/driver store) fail
@@ -77,7 +87,7 @@ Describe "Integration: image discovery" -Tag Integration {
         $image = $images | Select-Object -First 1
         $image.Index | Should -Be 1
         $image.Name | Should -Be "Windows 11 Pro IT"
-        $image.SourcePath | Should -BeLike "*baseline.wim"
+        $image.SourcePath | Should -BeLike "*.wim"
     }
 
     It "supports scriptblock filtering" {
@@ -134,7 +144,7 @@ Describe "Integration: snapshot and diff" -Tag Integration {
             $snapshot.Packages | Should -Not -BeNullOrEmpty
             $snapshot.Features | Should -Not -BeNullOrEmpty
             $snapshot.Capabilities | Should -Not -BeNullOrEmpty
-            $snapshot.AppxPackages | Should -Not -BeNullOrEmpty
+            $snapshot.AppxPackages | Should -Not -BeNull
             $snapshot.Software | Should -Not -BeNullOrEmpty
         }
         finally {

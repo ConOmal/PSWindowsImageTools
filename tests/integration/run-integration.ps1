@@ -4,7 +4,10 @@
 
 [CmdletBinding()]
 param(
-    [switch]$KeepWorkspace
+    [switch]$KeepWorkspace,
+    # Optional: run against a real captured WIM (real CBS + driver store) instead
+    # of building the synthetic image. Enables the full servicing test surface.
+    [string]$RealWim
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +27,11 @@ if (-not $pester5) {
 }
 
 Import-Module $pester5.Path -Force
+
+if ($RealWim) {
+    if (-not (Test-Path $RealWim)) { throw "RealWim not found: $RealWim" }
+    $env:PSWIT_IT_WIM = (Resolve-Path $RealWim).Path
+}
 
 $testDir = $PSScriptRoot
 $config = New-PesterConfiguration
