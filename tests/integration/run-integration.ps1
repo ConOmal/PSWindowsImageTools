@@ -26,5 +26,10 @@ if (-not $pester5) {
 Import-Module $pester5.Path -Force
 
 $testDir = $PSScriptRoot
-Invoke-Pester -Path $testDir -Tag Integration -Output Detailed
-exit ($LASTEXITCODE)
+$config = New-PesterConfiguration
+$config.Run.Path = $testDir
+$config.Run.PassThru = $true
+$config.Filter.Tag = 'Integration'
+$config.Output.Verbosity = 'Detailed'
+$run = Invoke-Pester -Configuration $config
+exit [int]($run.FailedCount -gt 0)
