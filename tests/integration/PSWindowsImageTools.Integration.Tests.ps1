@@ -1,0 +1,293 @@
+# Integration tests: exercise real DISM operations against a synthetic WIM.
+# Requires an elevated session. Run via Tests/integration/run-integration.ps1.
+# Tagged 'Integration' so unit-level CI runs never pick these up.
+
+BeforeAll {
+    $script:ModuleManifest = Join-Path $PSScriptRoot "..\..\Module\PSWindowsImageTools\PSWindowsImageTools.psd1"
+    Import-Module $script:ModuleManifest -Force
+
+    # Unique workspace per run
+    $script:Workspace = Join-Path ([System.IO.Path]::GetTempPath()) "PSWIT-IT-$([Guid]::NewGuid().ToString('N'))"
+    $script:SourceDir = Join-Path $script:Workspace "src"
+    $script:MountRoot = Join-Path $script:Workspace "mounts"
+    $script:BaselineWim = Join-Path $script:Workspace "baseline.wim"
+    $script:ModifiedWim = Join-Path $script:Workspace "modified.wim"
+
+    function New-IntegrationSource {
+        # Build a tiny fake image layout. The SOFTWARE hive is a REAL hive (copy of the Default
+        # user's NTUSER.DAT) so RegistryHiveOnDemand can parse it inside the mounted image.
+        $dir = Join-Path $SourceDir "Windows\System32\config"
+        New-Item -ItemType Directory -Force -Path $dir, (Join-Path $SourceDir "sources"), (Join-Path $SourceDir "boot") | Out-Null
+        Set-Content -Path (Join-Path $SourceDir "marker.txt") -Value "integration-test"
+        Copy-Item "C:\Users\Default\NTUSER.DAT" (Join-Path $dir "SOFTWARE") -Force
+    }
+
+    function New-IntegrationWim {
+        param([string]$ImageFile, [string]$Name)
+        dism /Capture-Image /ImageFile:$ImageFile /CaptureDir:$SourceDir /Name:$Name /Compress:max | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "DISM capture failed for $ImageFile (exit $LASTEXITCODE)" }
+    }
+
+    # Build workspace and baseline image once
+    New-IntegrationSource
+    New-IntegrationWim -ImageFile $BaselineWim -Name "Windows 11 Pro IT"
+
+    # Seed mount-root cleanup of stale entries so assertions are precise
+    $script:CleanMountIds = @()
+}
+
+AfterAll {
+    # Best-effort cleanup of any mounts left open by failed tests
+    Get-MountedWindowsImage -ErrorAction SilentlyContinue | Where-Object {
+        $_.MountPath -and $_.MountPath.FullName.StartsWith($script:Workspace)
+    } | ForEach-Object {
+        try { Dismount-WindowsImageList -Path $_.MountPath -Discard -Force -ErrorAction SilentlyContinue } catch { }
+    }
+
+    if ($script:Workspace -and (Test-Path $script:Workspace)) {
+        Remove-Item $script:Workspace -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Describe "Integration: image discovery" -Tag Integration {
+
+    It "discovers the synthetic image with correct metadata" {
+        $images = Get-WindowsImageList -ImagePath $BaselineWim
+        $images | Should -Not -BeNullOrEmpty
+        $image = $images | Select-Object -First 1
+        $image.Index | Should -Be 1
+        $image.Name | Should -Be "Windows 11 Pro IT"
+        $image.SourcePath | Should -BeLike "*baseline.wim"
+    }
+
+    It "supports scriptblock filtering" {
+        $match = Get-WindowsImageList -ImagePath $BaselineWim -InclusionFilter { $_.Name -like "*IT*" }
+        $match | Should -HaveCount 1
+        $none = Get-WindowsImageList -ImagePath $BaselineWim -InclusionFilter { $_.Name -like "*Nope*" }
+        $none | Should -BeNullOrEmpty
+    }
+}
+
+Describe "Integration: mount lifecycle" -Tag Integration {
+
+    It "mounts read-write, registers in the session registry, and cleans up on save-dismount" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        $mounted | Should -Not -BeNullOrEmpty
+        $mounted.Status.ToString() | Should -Be "Mounted"
+        Test-Path $mounted.MountPath.FullName | Should -BeTrue
+        Test-Path (Join-Path $mounted.MountPath.FullName "marker.txt") | Should -BeTrue
+
+        # Registered for cross-session re-discovery
+        $rediscovered = Get-MountedWindowsImage | Where-Object { $_.MountId -eq $mounted.MountId }
+        $rediscovered | Should -Not -BeNullOrEmpty
+
+        # Save-dismount cleans up the mount directory and the registry entry
+        $result = $mounted | Dismount-WindowsImageList -Save -RemoveDirectories
+        $result.Status.ToString() | Should -Be "Unmounted"
+
+        $stillThere = Get-MountedWindowsImage | Where-Object { $_.MountId -eq $mounted.MountId }
+        $stillThere | Should -BeNullOrEmpty
+    }
+
+    It "discards changes on discard-dismount" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        # Modify inside the image, then discard
+        Set-Content -Path (Join-Path $mounted.MountPath.FullName "should-not-persist.txt") -Value "temp"
+        $result = $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories
+        $result.Status.ToString() | Should -Be "Unmounted"
+    }
+}
+
+Describe "Integration: snapshot and diff" -Tag Integration {
+
+    It "captures a complete snapshot with all five categories" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot
+
+        try {
+            $snapshot = $mounted | Get-WindowsImageSnapshot
+            $snapshot | Should -Not -BeNullOrEmpty
+            $snapshot.Packages | Should -Not -BeNullOrEmpty
+            $snapshot.Features | Should -Not -BeNullOrEmpty
+            $snapshot.Capabilities | Should -Not -BeNullOrEmpty
+            $snapshot.AppxPackages | Should -Not -BeNullOrEmpty
+            $snapshot.Software | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    It "exports and reimports snapshot JSON" {
+        $exportDir = Join-Path $Workspace "snapshots"
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot
+
+        try {
+            $snapshot = $mounted | Get-WindowsImageSnapshot -ExportPath $exportDir
+            $file = Get-ChildItem $exportDir -Filter "snapshot_*.json" | Select-Object -First 1
+            $file | Should -Not -BeNullOrEmpty
+
+            $loaded = [PSWindowsImageTools.Services.ImageComparisonService]::LoadSnapshot($file.FullName)
+            $loaded.ImageName | Should -Be $snapshot.ImageName
+            $loaded.TotalItems | Should -Be $snapshot.TotalItems
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+}
+
+Describe "Integration: recipe end-to-end" -Tag Integration {
+
+    It "applies copyFiles and registryModifications, persists after save, and shows up in the diff" {
+        # Copy baseline -> modified, then run a recipe against the modified WIM
+        Copy-Item $BaselineWim $ModifiedWim -Force
+
+        $recipe = [ordered]@{
+            metadata = @{
+                name        = "IT Recipe"
+                description = "integration"
+                version     = "1.0.0"
+            }
+            imageFilter = @{
+                enabled             = $true
+                inclusionExpression = "IT"
+            }
+            copyFiles = @{
+                enabled = $true
+                items   = @(
+                    @{
+                        source      = Join-Path $Workspace "recipe-file.txt"
+                        destination = "Windows\IT-Recipe-File.txt"
+                        overwrite   = $true
+                    }
+                )
+            }
+            registryModifications = @{
+                enabled       = $true
+                modifications = @(
+                    @{ hive = "HKLM"; key = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ITTestApp"; valueName = "DisplayName";    valueData = "IT Test App"; valueType = "String" },
+                    @{ hive = "HKLM"; key = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ITTestApp"; valueName = "DisplayVersion"; valueData = "9.9.9";     valueType = "String" },
+                    @{ hive = "HKLM"; key = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ITTestApp"; valueName = "Publisher";      valueData = "IT";          valueType = "String" }
+                )
+            }
+        }
+        $recipePath = Join-Path $Workspace "recipe.json"
+        $recipe | ConvertTo-Json -Depth 6 | Set-Content $recipePath -Encoding UTF8
+
+        # Baseline snapshot (reference) mounted read-only from the untouched WIM
+        $referenceMounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot
+        try {
+            $script:referenceSnapshot = $referenceMounted | Get-WindowsImageSnapshot
+        }
+        finally {
+            $referenceMounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        # Run the recipe on the modified WIM
+        $results = Invoke-WindowsImageRecipe -RecipePath $recipePath -ImagePath $ModifiedWim -MountPath $MountRoot
+        $results | Should -HaveCount 1
+        $results[0].Success | Should -BeTrue
+        $results[0].Sections | Should -Not -BeNullOrEmpty
+
+        $copySection = $results[0].Sections | Where-Object SectionName -eq "copyFiles"
+        $copySection.SuccessCount | Should -Be 1
+
+        $regSection = $results[0].Sections | Where-Object SectionName -eq "registryModifications"
+        $regSection.SuccessCount | Should -Be 3
+        $regSection.FailureCount | Should -Be 0
+
+        # Re-mount the saved image and verify both changes persisted
+        $verifyMounted = Get-WindowsImageList -ImagePath $ModifiedWim |
+            Mount-WindowsImageList -MountRoot $MountRoot
+        try {
+            Test-Path (Join-Path $verifyMounted.MountPath.FullName "Windows\IT-Recipe-File.txt") | Should -BeTrue
+
+            $hiveResult = Get-RegistryHiveOnDemand -Path (Join-Path $verifyMounted.MountPath.FullName "Windows\System32\config\SOFTWARE") `
+                -KeyPath "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ITTestApp" -MaxDepth 0
+            $hiveResult | Should -Not -BeNullOrEmpty
+            $appKey = $hiveResult['ITTestApp']
+            $appKey | Should -Not -BeNullOrEmpty
+            ($appKey.Values['DisplayName']) | Should -Be "IT Test App"
+            ($appKey.Values['DisplayVersion']) | Should -Be "9.9.9"
+        }
+        finally {
+            $verifyMounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        # Snapshot the modified image and diff against baseline: exactly one software addition
+        $modifiedMounted = Get-WindowsImageList -ImagePath $ModifiedWim |
+            Mount-WindowsImageList -MountRoot $MountRoot
+        try {
+            $modifiedSnapshot = $modifiedMounted | Get-WindowsImageSnapshot
+        }
+        finally {
+            $modifiedMounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        $diff = [PSWindowsImageTools.Services.ImageComparisonService]::new().Compare($referenceSnapshot, $modifiedSnapshot)
+        $diff.AreIdentical | Should -BeFalse
+
+        $softwareDiff = $diff.Categories | Where-Object Category -eq "Software"
+        $softwareDiff.Added | Should -HaveCount 1
+        $softwareDiff.Added[0].Name | Should -Be "IT Test App"
+        $softwareDiff.Removed | Should -HaveCount 0
+    }
+}
+
+Describe "Integration: error contracts" -Tag Integration {
+
+    It "reports a clear error for a missing package file" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $err = $null
+            $mounted | Add-WindowsImagePackage -PackagePath (Join-Path $Workspace "does-not-exist.cab") -ErrorVariable err -ErrorAction SilentlyContinue
+            $err | Should -Not -BeNullOrEmpty
+            ($err | Where-Object { $_.FullyQualifiedErrorId -like "*PackageFileNotFound*" }) | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    It "returns a failed result for an invalid package with ContinueOnError" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $bogusCab = Join-Path $Workspace "bogus.cab"
+            Set-Content $bogusCab -Value "this is not a real cab"
+
+            $results = $mounted | Add-WindowsImagePackage -PackagePath $bogusCab -ContinueOnError -ErrorAction SilentlyContinue
+            $results | Should -Not -BeNullOrEmpty
+            $results[0].Success | Should -BeFalse
+            $results[0].ErrorMessage | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    It "returns a failed result for a missing feature with ContinueOnError" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $results = $mounted | Enable-WindowsImageFeature -FeatureName "NoSuchFeature-IT" -ContinueOnError -ErrorAction SilentlyContinue
+            $results | Should -Not -BeNullOrEmpty
+            $results[0].Success | Should -BeFalse
+            $results[0].ErrorMessage | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+}

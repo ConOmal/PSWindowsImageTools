@@ -10,6 +10,7 @@ namespace PSWindowsImageTools.Services
     /// <summary>
     /// Persistent registry of mounted Windows images so cmdlets can re-discover mounts across
     /// PowerShell sessions. State is stored as JSON under the module's temp directory.
+    /// Persisted via a flat DTO because DirectoryInfo cannot be JSON-serialized directly.
     /// </summary>
     public static class MountSessionService
     {
@@ -22,6 +23,27 @@ namespace PSWindowsImageTools.Services
             Path.GetTempPath(),
             "PSWindowsImageTools",
             "mounts.json");
+
+        /// <summary>
+        /// Serializable persistence entry (MountedWindowsImage holds DirectoryInfo, which
+        /// Newtonsoft cannot serialize)
+        /// </summary>
+        private sealed class MountSessionEntry
+        {
+            public string MountId { get; set; } = string.Empty;
+            public string SourceImagePath { get; set; } = string.Empty;
+            public int ImageIndex { get; set; }
+            public string ImageName { get; set; } = string.Empty;
+            public string Edition { get; set; } = string.Empty;
+            public string Architecture { get; set; } = string.Empty;
+            public string MountPath { get; set; } = string.Empty;
+            public string WimGuid { get; set; } = string.Empty;
+            public DateTime MountedAt { get; set; } = DateTime.UtcNow;
+            public string Status { get; set; } = "Mounted";
+            public bool IsReadOnly { get; set; } = true;
+            public string? ErrorMessage { get; set; }
+            public long ImageSize { get; set; }
+        }
 
         /// <summary>
         /// Registers a mounted image
@@ -40,8 +62,8 @@ namespace PSWindowsImageTools.Services
                 var mountPath = mountedImage.MountPath.FullName;
 
                 // Replace any existing entry for the same mount path
-                mounts.RemoveAll(m => string.Equals(m.MountPath?.FullName, mountPath, StringComparison.OrdinalIgnoreCase));
-                mounts.Add(mountedImage);
+                mounts.RemoveAll(m => string.Equals(m.MountPath, mountPath, StringComparison.OrdinalIgnoreCase));
+                mounts.Add(ToEntry(mountedImage));
                 SaveState(mounts);
             }
         }
@@ -61,7 +83,7 @@ namespace PSWindowsImageTools.Services
             {
                 var mounts = LoadState();
                 var before = mounts.Count;
-                mounts.RemoveAll(m => string.Equals(m.MountPath?.FullName, mountPath, StringComparison.OrdinalIgnoreCase));
+                mounts.RemoveAll(m => string.Equals(m.MountPath, mountPath, StringComparison.OrdinalIgnoreCase));
 
                 if (mounts.Count != before)
                 {
@@ -80,7 +102,7 @@ namespace PSWindowsImageTools.Services
             {
                 var mounts = LoadState();
                 var active = mounts
-                    .Where(m => m.MountPath != null && Directory.Exists(m.MountPath.FullName))
+                    .Where(m => !string.IsNullOrEmpty(m.MountPath) && Directory.Exists(m.MountPath))
                     .ToList();
 
                 // Prune dead entries discovered during validation
@@ -89,7 +111,7 @@ namespace PSWindowsImageTools.Services
                     SaveState(active);
                 }
 
-                return active;
+                return active.Select(ToMountedWindowsImage).ToList();
             }
         }
 
@@ -103,7 +125,7 @@ namespace PSWindowsImageTools.Services
             {
                 var mounts = LoadState();
                 var active = mounts
-                    .Where(m => m.MountPath != null && Directory.Exists(m.MountPath.FullName))
+                    .Where(m => !string.IsNullOrEmpty(m.MountPath) && Directory.Exists(m.MountPath))
                     .ToList();
 
                 var pruned = mounts.Count - active.Count;
@@ -116,28 +138,73 @@ namespace PSWindowsImageTools.Services
             }
         }
 
-        private static List<MountedWindowsImage> LoadState()
+        private static MountSessionEntry ToEntry(MountedWindowsImage mountedImage)
+        {
+            return new MountSessionEntry
+            {
+                MountId = mountedImage.MountId,
+                SourceImagePath = mountedImage.SourceImagePath,
+                ImageIndex = mountedImage.ImageIndex,
+                ImageName = mountedImage.ImageName,
+                Edition = mountedImage.Edition,
+                Architecture = mountedImage.Architecture,
+                MountPath = mountedImage.MountPath!.FullName,
+                WimGuid = mountedImage.WimGuid,
+                MountedAt = mountedImage.MountedAt,
+                Status = mountedImage.Status.ToString(),
+                IsReadOnly = mountedImage.IsReadOnly,
+                ErrorMessage = mountedImage.ErrorMessage,
+                ImageSize = mountedImage.ImageSize
+            };
+        }
+
+        private static MountedWindowsImage ToMountedWindowsImage(MountSessionEntry entry)
+        {
+            return new MountedWindowsImage
+            {
+                MountId = entry.MountId,
+                SourceImagePath = entry.SourceImagePath,
+                ImageIndex = entry.ImageIndex,
+                ImageName = entry.ImageName,
+                Edition = entry.Edition,
+                Architecture = entry.Architecture,
+                MountPath = new DirectoryInfo(entry.MountPath),
+                WimGuid = entry.WimGuid,
+                MountedAt = entry.MountedAt,
+                Status = ParseStatus(entry.Status),
+                IsReadOnly = entry.IsReadOnly,
+                ErrorMessage = entry.ErrorMessage,
+                ImageSize = entry.ImageSize
+            };
+        }
+
+        private static MountStatus ParseStatus(string status)
+        {
+            return Enum.TryParse<MountStatus>(status, ignoreCase: true, out var parsed) ? parsed : MountStatus.Mounted;
+        }
+
+        private static List<MountSessionEntry> LoadState()
         {
             try
             {
                 if (!File.Exists(StateFilePath))
                 {
-                    return new List<MountedWindowsImage>();
+                    return new List<MountSessionEntry>();
                 }
 
                 var json = File.ReadAllText(StateFilePath);
-                var mounts = JsonConvert.DeserializeObject<List<MountedWindowsImage>>(json);
+                var mounts = JsonConvert.DeserializeObject<List<MountSessionEntry>>(json);
 
-                return mounts ?? new List<MountedWindowsImage>();
+                return mounts ?? new List<MountSessionEntry>();
             }
             catch
             {
                 // Corrupt state should never block cmdlets
-                return new List<MountedWindowsImage>();
+                return new List<MountSessionEntry>();
             }
         }
 
-        private static void SaveState(List<MountedWindowsImage> mounts)
+        private static void SaveState(List<MountSessionEntry> mounts)
         {
             try
             {
