@@ -425,7 +425,7 @@ Describe "Integration: driver comparison" -Tag Integration {
 
 Describe "Integration: health check" -Tag Integration {
 
-    It "produces a health report with a computed OverallHealth" {
+    It "produces a health report with a computed OverallHealth" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 

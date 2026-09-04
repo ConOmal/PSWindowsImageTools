@@ -101,6 +101,7 @@ jobs:
         run: |
           $cfg = New-PesterConfiguration
           $cfg.Run.Path = './tests/integration'
+          $cfg.Run.PassThru = $true
           $cfg.Filter.Tag = 'Integration'
           $cfg.Output.Verbosity = 'Detailed'
           $cfg.TestResult.Enabled = $true
