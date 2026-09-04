@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Management.Automation;
 using Microsoft.Dism;
 using PSWindowsImageTools.Models;
 
@@ -98,6 +99,63 @@ namespace PSWindowsImageTools.Services
 
             _callbacks.Verbose?.Invoke($"Component store analysis complete for {mountedImage.ImageName}: {report}");
             return report;
+        }
+
+        /// <summary>
+        /// Builds the dism.exe argument string for component cleanup. Pure.
+        /// </summary>
+        internal static string BuildCleanupArguments(string mountPath, bool resetBase)
+        {
+            var args = $"/Image:\"{mountPath}\" /Cleanup-Image /StartComponentCleanup";
+            return resetBase ? args + " /ResetBase" : args;
+        }
+
+        /// <summary>
+        /// Runs component cleanup (and optionally ResetBase) against a mounted image via dism.exe,
+        /// since Microsoft.Dism has no managed API for this operation. Captures a before/after report.
+        /// </summary>
+        public ComponentStoreCleanupResult Cleanup(MountedWindowsImage mountedImage, IWindowsImageService imageService, bool resetBase, PSCmdlet cmdlet, int timeoutMinutes = 90)
+        {
+            if (mountedImage.MountPath == null)
+            {
+                throw new InvalidOperationException($"Mount path is null for image {mountedImage.ImageName}");
+            }
+
+            var before = Analyze(mountedImage, imageService);
+            var mountPath = mountedImage.MountPath.FullName;
+            var args = BuildCleanupArguments(mountPath, resetBase);
+
+            _callbacks.Verbose?.Invoke($"Running component cleanup for {mountedImage.ImageName}: dism.exe {args}");
+
+            var startTime = DateTime.UtcNow;
+            var processMonitor = new ProcessMonitoringService();
+            var exitCode = processMonitor.ExecuteProcessWithMonitoring(
+                "dism.exe",
+                args,
+                workingDirectory: null,
+                timeoutMinutes: timeoutMinutes,
+                progressTitle: "Optimizing Windows Image Component Store",
+                progressDescription: $"Cleaning up {mountedImage.ImageName}",
+                cmdlet);
+            var duration = DateTime.UtcNow - startTime;
+
+            var result = new ComponentStoreCleanupResult
+            {
+                Before = before,
+                ExitCode = exitCode,
+                Duration = duration
+            };
+
+            if (exitCode == 0)
+            {
+                result.After = Analyze(mountedImage, imageService);
+            }
+            else
+            {
+                _callbacks.Warning?.Invoke($"Component cleanup for {mountedImage.ImageName} exited with code {exitCode}");
+            }
+
+            return result;
         }
     }
 }

@@ -102,6 +102,7 @@
 
         # Component Store Analysis
         'Get-WindowsImageComponentStore',
+        'Optimize-WindowsImageComponentStore',
 
         # Recipe-Driven Image Builds
         'New-WindowsImageRecipe',

@@ -59,5 +59,14 @@ namespace PSWindowsImageTools.Tests
             Assert.Equal(2, report.PendingPackages);
             Assert.Equal(new[] { "Package-B" }, report.SupersededPackageNames);
         }
+
+        [Theory]
+        [InlineData(false, "/Image:\"C:\\Mount\" /Cleanup-Image /StartComponentCleanup")]
+        [InlineData(true, "/Image:\"C:\\Mount\" /Cleanup-Image /StartComponentCleanup /ResetBase")]
+        public void BuildCleanupArguments_ReturnsExpectedDismArgs(bool resetBase, string expected)
+        {
+            var args = ComponentStoreService.BuildCleanupArguments(@"C:\Mount", resetBase);
+            Assert.Equal(expected, args);
+        }
     }
 }

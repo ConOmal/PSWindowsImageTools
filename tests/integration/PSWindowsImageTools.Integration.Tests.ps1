@@ -309,4 +309,20 @@ Describe "Integration: component store" -Tag Integration {
             $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
         }
     }
+
+    It "optimizes the component store and reports before/after" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $result = $mounted | Optimize-WindowsImageComponentStore -Confirm:$false
+            $result | Should -Not -BeNullOrEmpty
+            $result.Before | Should -Not -BeNullOrEmpty
+            $result.ExitCode | Should -Be 0
+            $result.After | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
 }
