@@ -5,6 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
@@ -57,4 +58,61 @@ jobs:
         with:
           name: test-results
           path: ./TestResults/*.trx
+          if-no-files-found: warn
+
+  integration:
+    # Real DISM mount/save round-trips against a synthetic WIM. Runs on every
+    # push to main and on manual dispatch; dev-branch pushes run unit tests only.
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore and build module
+        run: |
+          dotnet restore src/PSWindowsImageTools.csproj
+          dotnet build src/PSWindowsImageTools.csproj --no-restore --nologo
+        shell: pwsh
+
+      - name: Sync fresh binary into the module
+        run: Copy-Item Artifacts/bin/PSWindowsImageTools.dll Module/PSWindowsImageTools/bin/PSWindowsImageTools.dll -Force
+        shell: pwsh
+
+      - name: Ensure Pester 5
+        run: |
+          $pester = Get-Module Pester -ListAvailable | Where-Object { $_.Version.Major -ge 5 } | Select-Object -First 1
+          if (-not $pester) {
+            Save-Module Pester -Path "$env:RUNNER_TEMP\pester" -RequiredVersion 5.7.1
+            $pesterPath = Get-ChildItem "$env:RUNNER_TEMP\pester" -Recurse -Filter Pester.psd1 | Select-Object -First 1
+            Import-Module $pesterPath.FullName -Force
+          }
+          else { Import-Module $pester.Path -Force }
+          Write-Output "Pester $((Get-Module Pester).Version) ready"
+        shell: pwsh
+
+      - name: Run integration suite
+        run: |
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './tests/integration'
+          $cfg.Filter.Tag = 'Integration'
+          $cfg.Output.Verbosity = 'Detailed'
+          $cfg.TestResult.Enabled = $true
+          $cfg.TestResult.OutputPath = './TestResults/integration-results.xml'
+          $run = Invoke-Pester -Configuration $cfg
+          exit [int]($run.FailedCount -gt 0)
+        shell: pwsh
+
+      - name: Upload integration results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results
+          path: ./TestResults/integration-results.xml
           if-no-files-found: warn

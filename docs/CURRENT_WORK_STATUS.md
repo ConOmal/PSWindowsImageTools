@@ -10,6 +10,17 @@
 - CI green on the release commit: build + 176 tests + help-coverage guardrail all pass on windows-latest
 - Upstream repo `origin` retained for history; `fork` remote points at the publish target
 
+## Deferred
+- **Module rename to `PSISOWIMTools`** (user-requested, deferred 2026-09-04): PSGallery has no
+  rename primitive — the plan is to publish a NEW package named `PSISOWIMTools` and leave
+  `PSWindowsImageTools` in place (optionally with one final "superseded" description release).
+  Scoped plan: rename module dir + psd1 + bin DLL + MAML, `src/PSISOWIMTools.csproj` (AssemblyName
+  + RootNamespace), test csproj dir, sln, C# namespaces (PSWindowsImageTools→PSISOWIMTools across
+  ~200 files), help md front matter (`external help file`/`Module Name` drive the MAML filename),
+  workflows (build/verify/Publish-Module paths), scripts, README, .gitignore; new manifest GUID;
+  version 2026.09.04.2; tag v2026.09.04.2 → release workflow publishes the new package.
+  Keep cmdlet noun names unchanged. GitHub repo name stays unless separately requested.
+
 ## Completed
 
 ### Phase 0 — Baseline & Safety Net
