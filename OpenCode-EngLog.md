@@ -130,3 +130,23 @@ Fix the PSWindowsImageTools integration test suite (Phase A3) so all 10 tests pa
 - Release pipeline fully proven: dispatch/tag → build+test → manifest guard → publish → public discovery → install → load.
 - Note: gallery CDN lags briefly behind publish (nupkg HEAD returned 404 for ~a minute while the page was already live).
 - Open item: the phase-1 branch (62 cmdlets + all fixes) merges to main → next tag picks up the full pipeline (workflow already on main).
+
+## Phase 1 Merge + Release v2026.09.04.1 (2026-09-04 ~21:0x UTC)
+- Folded the parallel session's in-flight refinements into the branch as `d6ed2e7` (component-store
+  `includeStoreSize` perf option, driver/health-check polish, SBOM integration test) — tree verified
+  green beforehand.
+- Merge to main in a worktree (parallel session active on the shared tree): `46a2877` — single
+  conflict, the MAML (54 vs 62 commands); took the branch's superset, then regenerated from source.
+- Merged tree: build clean, **176/176 unit tests**, help guardrail caught one new drift
+  (`Get-WindowsImageDriver -ContinueOnError`) → documented + MAML regenerated → verify-help PASS.
+- `2ad3294`: ModuleVersion → **2026.09.04.1** (date-based, matches machine date), CHANGELOG +
+  CURRENT_WORK_STATUS updated; manifest validates (62 commands).
+- Tag `v2026.09.04.1` pushed → Release run `33919092898` **SUCCESS** (Build/Test/manifest guard/
+  Publish all green).
+- PSGallery verification: `Find-Module -RequiredVersion 2026.9.4.1` ✓ (published 21:02:26),
+  nupkg GET 200 (1.27 MB), page 200, Save+Import from gallery → **62 commands live**.
+- Nupkg HEAD 404 mystery closed: the PSGallery v2 endpoint does not answer HEAD; GET works (200).
+  Nothing wrong with the earlier publish — probe artifact, not a package problem.
+- Blocked items status: 10/17 integration tests remain env-blocked (machine DISM servicing — pass
+  on CI/non-Store pwsh hosts); component-store pwsh crash remains with the parallel session's
+  cmdlet ($ErrorActionPreference=Stop escalation); merge/tag unblocked and DONE.
