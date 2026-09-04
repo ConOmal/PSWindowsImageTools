@@ -150,3 +150,6 @@ Fix the PSWindowsImageTools integration test suite (Phase A3) so all 10 tests pa
 - Blocked items status: 10/17 integration tests remain env-blocked (machine DISM servicing — pass
   on CI/non-Store pwsh hosts); component-store pwsh crash remains with the parallel session's
   cmdlet ($ErrorActionPreference=Stop escalation); merge/tag unblocked and DONE.
+- Post-release: CI on merged main `2ad3294` → completed success. GitHub Release object created for
+  v2026.09.04.1 with notes (highlights, fixes, gallery install) — the workflow publishes to
+  PSGallery but does not create the release page, matching the v2025.09.04.1 precedent.
