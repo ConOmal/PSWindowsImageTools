@@ -5,7 +5,7 @@ All notable changes to PSWindowsImageTools will be documented in this file.
 ## [2025.09.04] - Phase 2-4: Architecture Refactor & Feature Completion
 
 ### Added
-- **12 new cmdlets** (49 total exported):
+- **14 new cmdlets** (51 total exported):
   - Package/feature/capability management: `Get-WindowsImagePackageList`, `Get-WindowsImageFeatureList`,
     `Add-WindowsImagePackage`, `Enable-WindowsImageFeature`, `Disable-WindowsImageFeature`,
     `Add-WindowsImageCapability`, `Remove-WindowsImageCapability`
@@ -14,6 +14,7 @@ All notable changes to PSWindowsImageTools will be documented in this file.
   - `New-WindowsImageISO` (oscdimg via installed ADK)
   - `Get-MountedWindowsImage` (cross-session mount registry with -Prune)
   - `Update-WindowsImageOnline` (latest-KB discovery → catalog download → install)
+  - Image diffing: `Get-WindowsImageSnapshot` (JSON export) + `Compare-WindowsImage` (added/removed/changed)
 - **BuildRecipe executor**: declarative JSON recipes driving image builds — AppX removal, file copy,
   wallpapers, feature enablement, driver/update/FoD integration, offline registry writes
 - ISO input support in `Get-WindowsImageList` (mounts ISO, locates install.wim/esd)

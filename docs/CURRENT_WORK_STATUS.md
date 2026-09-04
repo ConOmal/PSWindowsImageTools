@@ -52,14 +52,16 @@
 - **`Update-WindowsImageOnline`**: one-liner servicing — auto-discovers latest KB from release
   history, searches/downloads from the Update Catalog, installs into selected images. Supports
   pre-downloaded `-UpdatePackages` and explicit `-Query` modes
+- **Image diffing**: `Get-WindowsImageSnapshot` (packages/features/capabilities/AppX/software,
+  JSON export) + `Compare-WindowsImage` (two mounted images or two snapshot files →
+  added/removed/changed per category)
 
 ## Module Totals
-- 49 exported cmdlets · 93 unit tests passing · build clean (0 warnings)
+- 51 exported cmdlets · 99 unit tests passing · build clean (0 warnings)
 
 ## Known Remaining Tech Debt
 - Older services (catalog, ADK, INF, wallpaper, unattend, autopilot) still take PSCmdlet — burn
   down to ModuleCallbacks opportunistically when touched
-- `Compare-WindowsImage` diffing not yet implemented (planned Phase 4 item)
-- Docs drift in CmdletReference for older cmdlets (e.g., Get-PatchTuesday parameters are
-  -Remaining/-All, not -Next as documented); PlatyPS-generated help planned
+- Docs drift in CmdletReference for older cmdlets fixed 2025-09-04 (reference rewritten from
+  actual signatures); PlatyPS-generated help still planned
 - Module bin refresh requires no other PowerShell session holding the DLLs (rename-swap used during dev)

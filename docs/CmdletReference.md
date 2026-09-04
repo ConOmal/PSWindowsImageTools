@@ -15,6 +15,7 @@ the actual exported cmdlets. `*` marks mandatory parameters.
 - [ADK Management](#adk-management)
 - [Image Export & ISO](#image-export--iso)
 - [Mount Session & One-liner Servicing](#mount-session--one-liner-servicing)
+- [Image Diffing](#image-diffing)
 
 ---
 
@@ -392,6 +393,38 @@ Update-WindowsImageOnline -ImagePath <String*> -Query "KB5065429" [-Architecture
 $packages | Update-WindowsImageOnline -ImagePath <String*>
 
 Common: [-OperatingSystem] [-DestinationPath] [-MountPath] [-MaxImages 5] [-MaxUpdates 10] [-ContinueOnError]
+```
+
+---
+
+## Image Diffing
+
+### Get-WindowsImageSnapshot
+Capture an inventory snapshot of mounted images (packages, features, capabilities, provisioned
+AppX, installed software). Snapshots can be exported as JSON for point-in-time comparisons.
+
+```powershell
+$mounted | Get-WindowsImageSnapshot [-ExportPath <String>]
+```
+
+### Compare-WindowsImage
+Compare two snapshots to surface what changed (added / removed / changed per category).
+
+```powershell
+# Two mounted images (e.g., vanilla vs customized)
+$reference, $difference | Compare-WindowsImage
+
+# Two exported snapshot files (before/after audits)
+Compare-WindowsImage -ReferencePath "before.json" -DifferencePath "after.json"
+```
+
+Output: `ImageComparisonResult` with per-category `Added` / `Removed` / `Changed` lists,
+`TotalDifferences`, and `AreIdentical`.
+
+```powershell
+$diff = Compare-WindowsImage -ReferencePath vanilla.json -DifferencePath corporate.json
+$diff.Categories | Format-Table Category, Count
+$diff.Categories | ForEach-Object { $_.Added } | Format-Table Name, State
 ```
 
 ---

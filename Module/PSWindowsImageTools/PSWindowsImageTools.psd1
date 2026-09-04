@@ -104,6 +104,10 @@
         'Get-MountedWindowsImage',
         'Update-WindowsImageOnline',
 
+        # Image Diffing
+        'Get-WindowsImageSnapshot',
+        'Compare-WindowsImage',
+
 
 
         # Registry Operations
