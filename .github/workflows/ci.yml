@@ -163,10 +163,28 @@ jobs:
             '\Users\runneradmin\AppData\Local\Temp'
           )
           Set-Content -Path C:\PSWIT-exclusions.ini -Value $exclusionLines -Encoding ascii
-          dism /Capture-Image /ImageFile:C:\PSWIT-real.wim /CaptureDir:C:\ /Name:"Windows 11 Pro IT" /Compress:max /ConfigFile:C:\PSWIT-exclusions.ini
-          if ($LASTEXITCODE -ne 0) { throw "DISM capture failed (exit $LASTEXITCODE)" }
+          $result = Invoke-CimMethod -ClassName Win32_ShadowCopy -MethodName Create -Arguments @{ Volume = 'C:\'; Context = 'ClientAccessible' }
+          if ($result.ReturnValue -ne 0) { throw "VSS snapshot creation failed (return $($result.ReturnValue))" }
+          $shadow = Get-CimInstance Win32_ShadowCopy | Where-Object ID -eq $result.ShadowID
+          $device = "$($shadow.DeviceObject)\"
+          "Shadow copy: $device"
+          dism /Capture-Image /ImageFile:C:\PSWIT-real.wim /CaptureDir:"$device" /Name:"Windows 11 Pro IT" /Compress:max /ConfigFile:C:\PSWIT-exclusions.ini
+          $captureExit = $LASTEXITCODE
+          $shadow | Remove-CimInstance
+          if ($captureExit -ne 0) {
+            Copy-Item C:\Windows\Logs\DISM\dism.log ./dism-capture.log -ErrorAction SilentlyContinue
+            throw "DISM capture failed (exit $captureExit)"
+          }
           "Captured baseline: {0:N2} GB" -f ((Get-Item C:\PSWIT-real.wim).Length / 1GB)
         shell: pwsh
+
+      - name: Upload capture diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-diagnostics
+          path: ./dism-capture.log
+          if-no-files-found: ignore
 
       - name: Ensure Pester 5
         run: |
