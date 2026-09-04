@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Validate the release steps without publishing to PSGallery'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore src/PSWindowsImageTools.csproj
+        shell: pwsh
+
+      - name: Build module
+        run: dotnet build src/PSWindowsImageTools.csproj --no-restore --nologo
+        shell: pwsh
+
+      - name: Test
+        run: >
+          dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./TestResults
+        shell: pwsh
+
+      - name: Validate module manifest
+        run: |
+          $manifest = Test-ModuleManifest -Path ./Module/PSWindowsImageTools/PSWindowsImageTools.psd1
+          Write-Output "Manifest OK: $($manifest.Name) v$($manifest.Version)"
+          Write-Output "Exported commands: $($manifest.ExportedCommands.Count)"
+          if ($manifest.ExportedCommands.Count -lt 50) {
+            throw "Expected at least 50 exported commands, got $($manifest.ExportedCommands.Count)"
+          }
+        shell: pwsh
+
+      - name: Publish to PSGallery (dry run)
+        if: ${{ inputs.dry_run == true || inputs.dry_run == 'true' }}
+        run: |
+          Write-Output "Dry run: skipping Publish-Module. Manifest validated, module builds, tests pass."
+        shell: pwsh
+
+      - name: Publish to PSGallery
+        if: ${{ !(inputs.dry_run == true || inputs.dry_run == 'true') }}
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PSGALLERY_API_KEY)) {
+            Write-Output "##[warning]PSGALLERY_API_KEY secret not set - skipping publish (set it in repo Settings > Secrets)"
+            exit 0
+          }
+          Publish-Module -Path ./Module/PSWindowsImageTools -NuGetApiKey $env:PSGALLERY_API_KEY -Force
+          Write-Output "Published PSWindowsImageTools v$((Test-ModuleManifest -Path ./Module/PSWindowsImageTools/PSWindowsImageTools.psd1).Version) to PSGallery"
+        shell: pwsh
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults/*.trx
+          if-no-files-found: warn

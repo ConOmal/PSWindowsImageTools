@@ -45,6 +45,12 @@ jobs:
           Write-Output "All $($commands.Count) cmdlets have help coverage"
         shell: pwsh
 
+      - name: Verify help documentation sync
+        run: |
+          Install-Module platyPS -Scope CurrentUser -Force -AllowClobber
+          ./Scripts/verify-help.ps1
+        shell: pwsh
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
