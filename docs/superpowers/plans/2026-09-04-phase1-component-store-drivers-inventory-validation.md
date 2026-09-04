@@ -1,6 +1,6 @@
 # Phase 1 Extensions Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add component-store analysis/cleanup, offline-image driver management, an SBOM export, and a composite health check to PSWindowsImageTools, as compiled C# cmdlets matching the module's existing conventions.
 
@@ -35,7 +35,7 @@
 - Produces: `ComponentStoreCleanupResult { Before: ComponentStoreReport, After: ComponentStoreReport?, ExitCode: int, Duration: TimeSpan, Success: bool }`
 - Produces: `ComponentStoreService.ClassifyPackages(IEnumerable<(string Name, DismPackageFeatureState State)>, ComponentStoreReport)` — `internal static`, pure.
 
-- [ ] **Step 1: Write the failing test for package classification**
+- [x] **Step 1: Write the failing test for package classification**
 
 ```csharp
 using System.Collections.Generic;
@@ -73,12 +73,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ComponentStoreServiceTests`
 Expected: FAIL (build error — `ComponentStoreReport`/`ComponentStoreService` don't exist yet)
 
-- [ ] **Step 3: Create the models**
+- [x] **Step 3: Create the models**
 
 ```csharp
 using System;
@@ -124,7 +124,7 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 4: Create the service with the pure classification method**
+- [x] **Step 4: Create the service with the pure classification method**
 
 ```csharp
 using System;
@@ -178,12 +178,12 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ComponentStoreServiceTests`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/Models/ComponentStoreModels.cs src/Services/ComponentStoreService.cs tests/PSWindowsImageTools.Tests/ComponentStoreServiceTests.cs
@@ -204,7 +204,7 @@ git commit -m "feat: add ComponentStoreReport model and package classification l
 - Consumes: `ComponentStoreReport`, `ComponentStoreService.ClassifyPackages` (Task 1); `IWindowsImageService.GetPackages(string mountPath)`, `MountedWindowsImage { MountPath: DirectoryInfo?, ImageName, SourceImagePath }`, `WindowsImageService.ForCmdlet(PSCmdlet)` (existing).
 - Produces: `ComponentStoreService.GetDirectorySizeMB(string path) -> double` (`internal static`, pure). `ComponentStoreService.Analyze(MountedWindowsImage, IWindowsImageService) -> ComponentStoreReport`.
 
-- [ ] **Step 1: Write the failing test for the size helper**
+- [x] **Step 1: Write the failing test for the size helper**
 
 ```csharp
 [Fact]
@@ -238,12 +238,12 @@ public void GetDirectorySizeMB_MissingDirectory_ReturnsZero()
 
 Add `using System.IO;` and `using System;` to the test file's usings if not already present.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ComponentStoreServiceTests`
 Expected: FAIL (`GetDirectorySizeMB` not defined)
 
-- [ ] **Step 3: Implement GetDirectorySizeMB and Analyze**
+- [x] **Step 3: Implement GetDirectorySizeMB and Analyze**
 
 Add to `src/Services/ComponentStoreService.cs` (inside the `ComponentStoreService` class, after `ClassifyPackages`):
 
@@ -303,12 +303,12 @@ Add to `src/Services/ComponentStoreService.cs` (inside the `ComponentStoreServic
         }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ComponentStoreServiceTests`
 Expected: PASS
 
-- [ ] **Step 5: Create the cmdlet**
+- [x] **Step 5: Create the cmdlet**
 
 ```csharp
 using System;
@@ -377,13 +377,13 @@ namespace PSWindowsImageTools.Cmdlets
 }
 ```
 
-- [ ] **Step 6: Build the module and smoke-test the cmdlet is registered**
+- [x] **Step 6: Build the module and smoke-test the cmdlet is registered**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Get-WindowsImageComponentStore'` to the `CmdletsToExport` array in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1` (alphabetically among the other `Get-WindowsImage*` entries).
 Run: `powershell -NoProfile -Command "Import-Module ./Module/PSWindowsImageTools/PSWindowsImageTools.psd1 -Force; Get-Command Get-WindowsImageComponentStore"` — expect the cmdlet to be found.
 
-- [ ] **Step 7: Add the integration test**
+- [x] **Step 7: Add the integration test**
 
 Append to `tests/integration/PSWindowsImageTools.Integration.Tests.ps1` (new `Describe` block, matching the file's existing style):
 
@@ -408,7 +408,7 @@ Describe "Integration: component store" -Tag Integration {
 }
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/Services/ComponentStoreService.cs src/Cmdlets/ComponentStoreCmdlets.cs tests/PSWindowsImageTools.Tests/ComponentStoreServiceTests.cs tests/integration/PSWindowsImageTools.Integration.Tests.ps1 Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -429,7 +429,7 @@ git commit -m "feat: add Get-WindowsImageComponentStore cmdlet"
 - Consumes: `ComponentStoreReport`, `ComponentStoreCleanupResult` (Task 1), `ComponentStoreService.Analyze` (Task 2), `ProcessMonitoringService.ExecuteProcessWithMonitoring` (existing, signature: `(string fileName, string arguments, string? workingDirectory, int timeoutMinutes, string progressTitle, string progressDescription, PSCmdlet? cmdlet) -> int`).
 - Produces: `ComponentStoreService.BuildCleanupArguments(string mountPath, bool resetBase) -> string` (`internal static`, pure). `ComponentStoreService.Cleanup(MountedWindowsImage, IWindowsImageService, bool resetBase, PSCmdlet, int timeoutMinutes = 90) -> ComponentStoreCleanupResult`.
 
-- [ ] **Step 1: Write the failing test for the argument builder**
+- [x] **Step 1: Write the failing test for the argument builder**
 
 ```csharp
 [Theory]
@@ -442,12 +442,12 @@ public void BuildCleanupArguments_ReturnsExpectedDismArgs(bool resetBase, string
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ComponentStoreServiceTests`
 Expected: FAIL (`BuildCleanupArguments` not defined)
 
-- [ ] **Step 3: Implement BuildCleanupArguments and Cleanup**
+- [x] **Step 3: Implement BuildCleanupArguments and Cleanup**
 
 Add to `src/Services/ComponentStoreService.cs`:
 
@@ -512,12 +512,12 @@ Add to `src/Services/ComponentStoreService.cs`:
 
 Add `using System.Management.Automation;` to the top of `ComponentStoreService.cs` if not already present.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ComponentStoreServiceTests`
 Expected: PASS
 
-- [ ] **Step 5: Add the cmdlet to ComponentStoreCmdlets.cs**
+- [x] **Step 5: Add the cmdlet to ComponentStoreCmdlets.cs**
 
 ```csharp
     /// <summary>
@@ -590,12 +590,12 @@ Expected: PASS
     }
 ```
 
-- [ ] **Step 6: Build and register the cmdlet**
+- [x] **Step 6: Build and register the cmdlet**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Optimize-WindowsImageComponentStore'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
 
-- [ ] **Step 7: Add the integration test**
+- [x] **Step 7: Add the integration test**
 
 Append to the `Describe "Integration: component store"` block from Task 2:
 
@@ -617,7 +617,7 @@ Append to the `Describe "Integration: component store"` block from Task 2:
     }
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/Services/ComponentStoreService.cs src/Cmdlets/ComponentStoreCmdlets.cs tests/PSWindowsImageTools.Tests/ComponentStoreServiceTests.cs tests/integration/PSWindowsImageTools.Integration.Tests.ps1 Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -638,7 +638,7 @@ git commit -m "feat: add Optimize-WindowsImageComponentStore cmdlet"
 - Produces: `DriverComparisonResult { ReferenceName, CurrentName, Added: List<WindowsImageDriverInfo>, Removed: List<WindowsImageDriverInfo>, Superseded: List<WindowsImageDriverInfo>, DuplicateOem: List<WindowsImageDriverInfo> }`
 - Produces: `WindowsImageDriverService.Compare(List<WindowsImageDriverInfo> reference, List<WindowsImageDriverInfo> current) -> DriverComparisonResult`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```csharp
 using System;
@@ -731,12 +731,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter WindowsImageDriverServiceTests`
 Expected: FAIL (build error — types don't exist yet)
 
-- [ ] **Step 3: Create the models**
+- [x] **Step 3: Create the models**
 
 ```csharp
 using System;
@@ -786,7 +786,7 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 4: Implement the service's Compare method**
+- [x] **Step 4: Implement the service's Compare method**
 
 ```csharp
 using System;
@@ -878,12 +878,12 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter WindowsImageDriverServiceTests`
 Expected: PASS (all 5 tests)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/Models/DriverModels.cs src/Services/WindowsImageDriverService.cs tests/PSWindowsImageTools.Tests/WindowsImageDriverServiceTests.cs
@@ -907,7 +907,7 @@ git commit -m "feat: add driver models and pure driver-comparison logic"
 
 This task wraps the real `Microsoft.Dism` API (non-public constructors block unit construction of `DismDriverPackage`), so it has no new xUnit test — it is exercised by the integration test in Step 4, consistent with `Global Constraints`.
 
-- [ ] **Step 1: Add the interface members**
+- [x] **Step 1: Add the interface members**
 
 Add to `src/Services/Abstractions/IWindowsImageService.cs`, after `AddDriversFromDirectory`:
 
@@ -928,7 +928,7 @@ Add to `src/Services/Abstractions/IWindowsImageService.cs`, after `AddDriversFro
         void RemoveDriver(string mountPath, string publishedName);
 ```
 
-- [ ] **Step 2: Implement in WindowsImageService**
+- [x] **Step 2: Implement in WindowsImageService**
 
 Add to `src/Services/WindowsImageService.cs`, near `GetPackages`/`GetFeatures` (same file, same class), mirroring their exact pattern:
 
@@ -977,7 +977,7 @@ Add to `src/Services/WindowsImageService.cs`, near `GetPackages`/`GetFeatures` (
         }
 ```
 
-- [ ] **Step 3: Add the mapping method to WindowsImageDriverService**
+- [x] **Step 3: Add the mapping method to WindowsImageDriverService**
 
 Add to `src/Services/WindowsImageDriverService.cs`:
 
@@ -1014,7 +1014,7 @@ Add to `src/Services/WindowsImageDriverService.cs`:
         }
 ```
 
-- [ ] **Step 4: Create the cmdlet**
+- [x] **Step 4: Create the cmdlet**
 
 ```csharp
 using System;
@@ -1076,12 +1076,12 @@ namespace PSWindowsImageTools.Cmdlets
 }
 ```
 
-- [ ] **Step 5: Build and register the cmdlet**
+- [x] **Step 5: Build and register the cmdlet**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Get-WindowsImageDriver'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
 
-- [ ] **Step 6: Add the integration test**
+- [x] **Step 6: Add the integration test**
 
 Append to `tests/integration/PSWindowsImageTools.Integration.Tests.ps1`:
 
@@ -1104,7 +1104,7 @@ Describe "Integration: image drivers" -Tag Integration {
 }
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/Services/Abstractions/IWindowsImageService.cs src/Services/WindowsImageService.cs src/Services/WindowsImageDriverService.cs src/Cmdlets/WindowsImageDriverCmdlets.cs tests/integration/PSWindowsImageTools.Integration.Tests.ps1 Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -1122,7 +1122,7 @@ git commit -m "feat: add Get-WindowsImageDriver cmdlet"
 **Interfaces:**
 - Consumes: `WindowsImageDriverInfo` (Task 4), `IWindowsImageService.RemoveDriver(string mountPath, string publishedName)` (Task 5).
 
-- [ ] **Step 1: Add the cmdlet to WindowsImageDriverCmdlets.cs**
+- [x] **Step 1: Add the cmdlet to WindowsImageDriverCmdlets.cs**
 
 ```csharp
     /// <summary>
@@ -1188,12 +1188,12 @@ git commit -m "feat: add Get-WindowsImageDriver cmdlet"
     }
 ```
 
-- [ ] **Step 2: Build and register the cmdlet**
+- [x] **Step 2: Build and register the cmdlet**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Remove-WindowsImageDriver'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
 
-- [ ] **Step 3: Add the integration test**
+- [x] **Step 3: Add the integration test**
 
 Append to the `Describe "Integration: image drivers"` block from Task 5:
 
@@ -1220,7 +1220,7 @@ Append to the `Describe "Integration: image drivers"` block from Task 5:
     }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/Cmdlets/WindowsImageDriverCmdlets.cs tests/integration/PSWindowsImageTools.Integration.Tests.ps1 Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -1238,7 +1238,7 @@ git commit -m "feat: add Remove-WindowsImageDriver cmdlet"
 **Interfaces:**
 - Consumes: `WindowsImageDriverService.GetDrivers` (Task 5), `WindowsImageDriverService.Compare` (Task 4), `DriverComparisonResult` (Task 4).
 
-- [ ] **Step 1: Add the cmdlet to WindowsImageDriverCmdlets.cs**
+- [x] **Step 1: Add the cmdlet to WindowsImageDriverCmdlets.cs**
 
 ```csharp
     /// <summary>
@@ -1297,12 +1297,12 @@ git commit -m "feat: add Remove-WindowsImageDriver cmdlet"
     }
 ```
 
-- [ ] **Step 2: Build and register the cmdlet**
+- [x] **Step 2: Build and register the cmdlet**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Compare-WindowsImageDriver'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
 
-- [ ] **Step 3: Add the integration test**
+- [x] **Step 3: Add the integration test**
 
 Append to `tests/integration/PSWindowsImageTools.Integration.Tests.ps1`:
 
@@ -1325,7 +1325,7 @@ Describe "Integration: driver comparison" -Tag Integration {
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/Cmdlets/WindowsImageDriverCmdlets.cs tests/integration/PSWindowsImageTools.Integration.Tests.ps1 Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -1347,7 +1347,7 @@ git commit -m "feat: add Compare-WindowsImageDriver cmdlet"
 
 `CatalogFile` as returned by DISM may be an absolute path or a path relative to the image root, depending on DISM version — `ResolveDriverSourceDirectory` handles both so the pure logic is verifiable without a real mounted image.
 
-- [ ] **Step 1: Write the failing test for path resolution**
+- [x] **Step 1: Write the failing test for path resolution**
 
 Append to `tests/PSWindowsImageTools.Tests/WindowsImageDriverServiceTests.cs`:
 
@@ -1368,12 +1368,12 @@ Append to `tests/PSWindowsImageTools.Tests/WindowsImageDriverServiceTests.cs`:
         }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter WindowsImageDriverServiceTests`
 Expected: FAIL (`ResolveDriverSourceDirectory` not defined)
 
-- [ ] **Step 3: Implement ResolveDriverSourceDirectory and Export**
+- [x] **Step 3: Implement ResolveDriverSourceDirectory and Export**
 
 Add to `src/Services/WindowsImageDriverService.cs`:
 
@@ -1426,12 +1426,12 @@ Add to `src/Services/WindowsImageDriverService.cs`:
 
 Add `using System.IO;` to the top of `WindowsImageDriverService.cs` if not already present.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter WindowsImageDriverServiceTests`
 Expected: PASS
 
-- [ ] **Step 5: Write the failing test for Export's file copy**
+- [x] **Step 5: Write the failing test for Export's file copy**
 
 Append to `tests/PSWindowsImageTools.Tests/WindowsImageDriverServiceTests.cs`:
 
@@ -1469,12 +1469,12 @@ Append to `tests/PSWindowsImageTools.Tests/WindowsImageDriverServiceTests.cs`:
         }
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter WindowsImageDriverServiceTests`
 Expected: PASS (all tests including the two new ones)
 
-- [ ] **Step 7: Add the cmdlet**
+- [x] **Step 7: Add the cmdlet**
 
 Add to `src/Cmdlets/WindowsImageDriverCmdlets.cs`:
 
@@ -1539,12 +1539,12 @@ Add to `src/Cmdlets/WindowsImageDriverCmdlets.cs`:
     }
 ```
 
-- [ ] **Step 8: Build and register the cmdlet**
+- [x] **Step 8: Build and register the cmdlet**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Export-WindowsImageDriver'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
 
-- [ ] **Step 9: Add the integration test**
+- [x] **Step 9: Add the integration test**
 
 Append to the `Describe "Integration: image drivers"` block:
 
@@ -1570,7 +1570,7 @@ Append to the `Describe "Integration: image drivers"` block:
     }
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/Services/WindowsImageDriverService.cs src/Cmdlets/WindowsImageDriverCmdlets.cs tests/PSWindowsImageTools.Tests/WindowsImageDriverServiceTests.cs tests/integration/PSWindowsImageTools.Integration.Tests.ps1 Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -1590,7 +1590,7 @@ git commit -m "feat: add Export-WindowsImageDriver cmdlet"
 - Consumes: `WindowsImageDriverService.GetDrivers` (Task 5).
 - Modifies: `ImageSnapshot` gains `Drivers: List<SnapshotItem>`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/PSWindowsImageTools.Tests/ImageComparisonServiceTests.cs`, inside the `MakeSnapshot` helper's initializer, add a `Drivers` list matching the existing style:
 
@@ -1620,12 +1620,12 @@ Add a new test:
 
 Add `using System.Linq;` to the test file's usings if not already present (needed for `.Single(...)`).
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageComparisonServiceTests`
 Expected: FAIL (`Drivers` property doesn't exist on `ImageSnapshot`; `TotalItems` mismatch if referenced elsewhere)
 
-- [ ] **Step 3: Add the Drivers property to ImageSnapshot**
+- [x] **Step 3: Add the Drivers property to ImageSnapshot**
 
 In `src/Models/ImageComparisonModels.cs`, add to the `ImageSnapshot` class, alongside the existing `Packages`/`Features`/etc. properties:
 
@@ -1642,7 +1642,7 @@ Update `TotalItems`:
         public int TotalItems => Packages.Count + Features.Count + Capabilities.Count + AppxPackages.Count + Software.Count + Drivers.Count;
 ```
 
-- [ ] **Step 4: Wire driver capture into CaptureSnapshot and Compare**
+- [x] **Step 4: Wire driver capture into CaptureSnapshot and Compare**
 
 In `src/Services/ImageComparisonService.cs`, add to `CaptureSnapshot` (after the AppX-packages `try`/`catch` block, before installed-software capture). `CaptureSnapshot`'s existing signature already receives the caller's `MountedWindowsImage mountedImage` and `IWindowsImageService imageService` parameters — reuse them directly:
 
@@ -1674,12 +1674,12 @@ Add to `Compare`:
 
 Add `using PSWindowsImageTools.Services;`... actually this file is already in `namespace PSWindowsImageTools.Services`, so `WindowsImageDriverService` is directly accessible — no new using needed.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageComparisonServiceTests`
 Expected: PASS (all tests, including the pre-existing ones — confirms the extension didn't break existing behavior)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/Models/ImageComparisonModels.cs src/Services/ImageComparisonService.cs tests/PSWindowsImageTools.Tests/ImageComparisonServiceTests.cs
@@ -1700,7 +1700,7 @@ git commit -m "feat: capture driver inventory in ImageSnapshot"
 - Consumes: `ImageSnapshot` (Task 9), `ImageComparisonService.LoadSnapshot` (existing).
 - Produces: `SbomReport { WindowsVersion, ImageName, ImagePath, GeneratedAt, Packages, Drivers, Features, Capabilities, Applications: List<SnapshotItem> }`. `ImageComparisonService.BuildSbom(ImageSnapshot) -> SbomReport` (pure — maps one POCO to another).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```csharp
 using System;
@@ -1741,12 +1741,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter SbomReportTests`
 Expected: FAIL (`SbomReport`/`BuildSbom` don't exist yet)
 
-- [ ] **Step 3: Create the model**
+- [x] **Step 3: Create the model**
 
 ```csharp
 using System;
@@ -1775,7 +1775,7 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 4: Implement BuildSbom**
+- [x] **Step 4: Implement BuildSbom**
 
 Add to `src/Services/ImageComparisonService.cs`:
 
@@ -1798,12 +1798,12 @@ Add to `src/Services/ImageComparisonService.cs`:
         }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter SbomReportTests`
 Expected: PASS
 
-- [ ] **Step 6: Add the cmdlet to ImageComparisonCmdlets.cs**
+- [x] **Step 6: Add the cmdlet to ImageComparisonCmdlets.cs**
 
 ```csharp
     /// <summary>
@@ -1885,12 +1885,12 @@ Expected: PASS
     }
 ```
 
-- [ ] **Step 7: Build and register the cmdlet**
+- [x] **Step 7: Build and register the cmdlet**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Export-WindowsImageSBOM'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/Models/SbomModels.cs src/Services/ImageComparisonService.cs src/Cmdlets/ImageComparisonCmdlets.cs tests/PSWindowsImageTools.Tests/SbomReportTests.cs Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -1908,7 +1908,7 @@ git commit -m "feat: add Export-WindowsImageSBOM cmdlet"
 **Interfaces:**
 - Produces: `enum HealthStatus { Healthy, Warning, Unhealthy }`. `HealthFinding { Category: string, Severity: HealthStatus, Message: string }`. `HealthCheckReport { ImageName, ImagePath, MountPath, GeneratedAt, Findings: List<HealthFinding>, OverallHealth: HealthStatus (computed) }`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```csharp
 using System.Collections.Generic;
@@ -1958,12 +1958,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter HealthCheckModelsTests`
 Expected: FAIL (types don't exist yet)
 
-- [ ] **Step 3: Create the model with computed OverallHealth**
+- [x] **Step 3: Create the model with computed OverallHealth**
 
 ```csharp
 using System;
@@ -2020,12 +2020,12 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter HealthCheckModelsTests`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/Models/HealthCheckModels.cs tests/PSWindowsImageTools.Tests/HealthCheckModelsTests.cs
@@ -2047,7 +2047,7 @@ git commit -m "feat: add HealthCheckReport model with overall-health roll-up"
 
 This task's DISM-facing composition (`DismApi.CheckImageHealth`) has no unit test — it is exercised by the integration test in Step 3, consistent with `Global Constraints`. The findings composed from `ComponentStoreService`/`WindowsImageDriverService` are already covered by those services' own unit tests (Tasks 1 and 4).
 
-- [ ] **Step 1: Implement the service**
+- [x] **Step 1: Implement the service**
 
 ```csharp
 using System;
@@ -2215,7 +2215,7 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 2: Create the cmdlet**
+- [x] **Step 2: Create the cmdlet**
 
 ```csharp
 using System;
@@ -2285,7 +2285,7 @@ namespace PSWindowsImageTools.Cmdlets
 }
 ```
 
-- [ ] **Step 3: Build, register, and add the integration test**
+- [x] **Step 3: Build, register, and add the integration test**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success.
 Add `'Invoke-WindowsImageHealthCheck'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
@@ -2311,7 +2311,7 @@ Describe "Integration: health check" -Tag Integration {
 }
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/Services/WindowsImageHealthCheckService.cs src/Cmdlets/InvokeWindowsImageHealthCheckCmdlet.cs tests/integration/PSWindowsImageTools.Integration.Tests.ps1 Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -2324,27 +2324,27 @@ git commit -m "feat: add Invoke-WindowsImageHealthCheck cmdlet"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full unit test suite**
+- [x] **Step 1: Run the full unit test suite**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests`
 Expected: PASS — all pre-existing tests plus the ~15 new ones added across Tasks 1–11.
 
-- [ ] **Step 2: Build the full solution**
+- [x] **Step 2: Build the full solution**
 
 Run: `dotnet build PSWindowsImageTools.sln`
 Expected: PASS, no warnings-as-errors triggered.
 
-- [ ] **Step 3: Verify the module manifest lists all 9 new cmdlets and PowerShell can discover them**
+- [x] **Step 3: Verify the module manifest lists all 9 new cmdlets and PowerShell can discover them**
 
 Run: `powershell -NoProfile -Command "Import-Module ./Module/PSWindowsImageTools/PSWindowsImageTools.psd1 -Force; Get-Command Get-WindowsImageComponentStore, Optimize-WindowsImageComponentStore, Get-WindowsImageDriver, Remove-WindowsImageDriver, Compare-WindowsImageDriver, Export-WindowsImageDriver, Export-WindowsImageSBOM, Invoke-WindowsImageHealthCheck"`
 Expected: all 8 cmdlets found (the 9th change, `Drivers` on `ImageSnapshot`, is a model extension with no new cmdlet).
 
-- [ ] **Step 4: Run the integration suite (requires an elevated Windows session)**
+- [x] **Step 4: Run the integration suite (requires an elevated Windows session)**
 
 Run: `pwsh tests/integration/run-integration.ps1`
 Expected: PASS — all `-Tag Integration` describe blocks added in Tasks 2, 3, 5, 6, 7, 8, 12.
 
-- [ ] **Step 5: Commit any final cleanup**
+- [x] **Step 5: Commit any final cleanup**
 
 ```bash
 git status

@@ -1,6 +1,6 @@
 # Windows 11 ISO Servicing Pipeline Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Give PSWindowsImageTools an end-to-end path from "latest official Windows 11 ISO" to "customized bootable ISO": fetch the ISO, extract it, service `install.wim`/`boot.wim` (with `winre.wim` handled transparently), and rebuild a bootable ISO.
 
@@ -31,7 +31,7 @@
 **Interfaces:**
 - Produces: `PSWindowsImageTools.Models.WindowsInstallationMedia` with `DirectoryInfo Root`, `FileInfo? InstallWim`, `FileInfo? BootWim`, and `static WindowsInstallationMedia FromRoot(DirectoryInfo root)`. Used by Task 2's `WindowsISOExtractionService.ExtractIso`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```csharp
 using System;
@@ -94,12 +94,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WindowsInstallationMediaTests"`
 Expected: FAIL (build error — `WindowsInstallationMedia` does not exist yet)
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```csharp
 using System.IO;
@@ -153,12 +153,12 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WindowsInstallationMediaTests"`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/Models/WindowsInstallationMedia.cs tests/PSWindowsImageTools.Tests/WindowsInstallationMediaTests.cs
@@ -180,7 +180,7 @@ git commit -m "Add WindowsInstallationMedia model for extracted ISO media"
 - Consumes: `PSWindowsImageTools.Models.WindowsInstallationMedia.FromRoot(DirectoryInfo)` (Task 1).
 - Produces: `PSWindowsImageTools.Services.WindowsISOExtractionService` with instance method `WindowsInstallationMedia ExtractIso(FileInfo isoPath, DirectoryInfo destinationPath, PSCmdlet? cmdlet, Action<int,string>? progressCallback = null)` and `public static void CopyDirectoryTree(string sourceDir, string destinationDir, Action<int,string>? progressCallback = null)`. The `Export-WindowsISO` cmdlet (`[Cmdlet(VerbsData.Export, "WindowsISO")]`) outputs `WindowsInstallationMedia`.
 
-- [ ] **Step 1: Write the failing test (pure copy-logic only — mounting a real ISO needs admin rights and is verified manually in Step 7)**
+- [x] **Step 1: Write the failing test (pure copy-logic only — mounting a real ISO needs admin rights and is verified manually in Step 7)**
 
 ```csharp
 using System;
@@ -253,12 +253,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WindowsISOExtractionServiceTests"`
 Expected: FAIL (build error — `WindowsISOExtractionService` does not exist yet)
 
-- [ ] **Step 3: Write the service**
+- [x] **Step 3: Write the service**
 
 ```csharp
 using System;
@@ -435,12 +435,12 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WindowsISOExtractionServiceTests"`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Add the `Export-WindowsISO` cmdlet**
+- [x] **Step 5: Add the `Export-WindowsISO` cmdlet**
 
 ```csharp
 using System;
@@ -517,7 +517,7 @@ namespace PSWindowsImageTools.Cmdlets
 }
 ```
 
-- [ ] **Step 6: Update `Get-WindowsImageList`'s ISO error message to point at `Export-WindowsISO`**
+- [x] **Step 6: Update `Get-WindowsImageList`'s ISO error message to point at `Export-WindowsISO`**
 
 In `src/Cmdlets/GetWindowsImageListCmdlet.cs`, replace the body of `GetImageFilePath` (currently lines 321-334):
 
@@ -544,7 +544,7 @@ In `src/Cmdlets/GetWindowsImageListCmdlet.cs`, replace the body of `GetImageFile
         }
 ```
 
-- [ ] **Step 7: Add `Export-WindowsISO` to the module manifest**
+- [x] **Step 7: Add `Export-WindowsISO` to the module manifest**
 
 In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, in the `CmdletsToExport` array, add a new group right after the `# ESD/ISO Conversion` group (after `'Convert-ESDToWindowsImage',`):
 
@@ -553,12 +553,12 @@ In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, in the `CmdletsToExpor
         'Export-WindowsISO',
 ```
 
-- [ ] **Step 8: Build to confirm everything compiles**
+- [x] **Step 8: Build to confirm everything compiles**
 
 Run: `dotnet build src/PSWindowsImageTools.csproj`
 Expected: Build succeeded, 0 errors
 
-- [ ] **Step 9: Manual verification (requires a real Windows ISO and administrator rights — not automatable in this test suite)**
+- [x] **Step 9: Manual verification (requires a real Windows ISO and administrator rights — not automatable in this test suite)**
 
 ```powershell
 Import-Module .\Module\PSWindowsImageTools\PSWindowsImageTools.psd1 -Force
@@ -568,7 +568,7 @@ $media.BootWim.Exists      # expect True
 Get-DiskImage | Where-Object { $_.ImagePath -eq 'C:\ISO\Win11.iso' }   # expect no results (dismounted)
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/Services/WindowsISOExtractionService.cs src/Cmdlets/ExportWindowsISOCmdlet.cs src/Cmdlets/GetWindowsImageListCmdlet.cs Module/PSWindowsImageTools/PSWindowsImageTools.psd1 tests/PSWindowsImageTools.Tests/WindowsISOExtractionServiceTests.cs
@@ -587,7 +587,7 @@ git commit -m "Add Export-WindowsISO to extract ISO contents for servicing"
 **Interfaces:**
 - Produces: `PSWindowsImageTools.Services.WinREImageService` — `const string EmbeddedWinREPath`, `static bool TryGetEmbeddedWinREPath(string mountPath, out string winREPath)`, `static void ExtractEmbeddedWinRE(string mountPath, string destinationWimPath)`, `static void ReplaceEmbeddedWinRE(string mountPath, string updatedWimPath)`. `MountedWindowsImage.WinRE` becomes `MountedWindowsImage?`. Used by Task 4 and Task 5.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```csharp
 using System;
@@ -701,12 +701,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WinREImageServiceTests"`
 Expected: FAIL (build error — `WinREImageService` does not exist yet)
 
-- [ ] **Step 3: Write the service**
+- [x] **Step 3: Write the service**
 
 ```csharp
 using System.IO;
@@ -780,12 +780,12 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WinREImageServiceTests"`
 Expected: PASS (6 tests)
 
-- [ ] **Step 5: Add the `WinRE` property to `MountedWindowsImage`**
+- [x] **Step 5: Add the `WinRE` property to `MountedWindowsImage`**
 
 In `src/Models/MountedWindowsImage.cs`, add this property after `LastUpdateResult` (currently line 79, right before the `ToString()` override):
 
@@ -796,12 +796,12 @@ In `src/Models/MountedWindowsImage.cs`, add this property after `LastUpdateResul
         public MountedWindowsImage? WinRE { get; set; }
 ```
 
-- [ ] **Step 6: Build to confirm everything compiles**
+- [x] **Step 6: Build to confirm everything compiles**
 
 Run: `dotnet build src/PSWindowsImageTools.csproj`
 Expected: Build succeeded, 0 errors
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/Services/WinREImageService.cs src/Models/MountedWindowsImage.cs tests/PSWindowsImageTools.Tests/WinREImageServiceTests.cs
@@ -821,7 +821,7 @@ git commit -m "Add WinREImageService and MountedWindowsImage.WinRE"
 
 This task has no new automated test: it wires together `WinREImageService` (already unit tested in Task 3) with real DISM mounting, which requires administrator rights and a real Windows image — verified manually in Step 3.
 
-- [ ] **Step 1: Add the WinRE auto-mount helper and wire it in**
+- [x] **Step 1: Add the WinRE auto-mount helper and wire it in**
 
 In `src/Cmdlets/MountWindowsImageListCmdlet.cs`, in `MountSingleImage`, change:
 
@@ -913,12 +913,12 @@ Then add this new private method to the class (after `MountSingleImage`):
         }
 ```
 
-- [ ] **Step 2: Build to confirm everything compiles**
+- [x] **Step 2: Build to confirm everything compiles**
 
 Run: `dotnet build src/PSWindowsImageTools.csproj`
 Expected: Build succeeded, 0 errors
 
-- [ ] **Step 3: Manual verification (requires administrator rights and a real install.wim with an embedded WinRE)**
+- [x] **Step 3: Manual verification (requires administrator rights and a real install.wim with an embedded WinRE)**
 
 ```powershell
 Import-Module .\Module\PSWindowsImageTools\PSWindowsImageTools.psd1 -Force
@@ -928,7 +928,7 @@ $mounted.WinRE               # expect a MountedWindowsImage with Status 'Mounted
 Test-Path $mounted.WinRE.MountPath.FullName   # expect True
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/Cmdlets/MountWindowsImageListCmdlet.cs
@@ -948,7 +948,7 @@ git commit -m "Auto-mount embedded WinRE image when mounting install.wim"
 
 This task has no new automated test: it wires together `WinREImageService` (already unit tested in Task 3) with real DISM dismounting, which requires administrator rights and a real mounted image — verified manually in Step 3, continuing from Task 4's manual verification.
 
-- [ ] **Step 1: Add the WinRE dismount/re-embed helper and wire it in**
+- [x] **Step 1: Add the WinRE dismount/re-embed helper and wire it in**
 
 In `src/Cmdlets/DismountWindowsImageListCmdlet.cs`, in `DismountSingleImage`, change:
 
@@ -1070,12 +1070,12 @@ Then add this new private method to the class (after `DismountSingleImage`):
         }
 ```
 
-- [ ] **Step 2: Build to confirm everything compiles**
+- [x] **Step 2: Build to confirm everything compiles**
 
 Run: `dotnet build src/PSWindowsImageTools.csproj`
 Expected: Build succeeded, 0 errors
 
-- [ ] **Step 3: Manual verification (continues from Task 4's manual verification, requires administrator rights)**
+- [x] **Step 3: Manual verification (continues from Task 4's manual verification, requires administrator rights)**
 
 ```powershell
 "test" | Out-File (Join-Path $mounted.WinRE.MountPath.FullName 'winre-marker.txt')
@@ -1088,7 +1088,7 @@ Test-Path (Join-Path $mounted2.WinRE.MountPath.FullName 'winre-marker.txt')   # 
 $mounted2 | Dismount-WindowsImageList -Discard
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/Cmdlets/DismountWindowsImageListCmdlet.cs
@@ -1109,7 +1109,7 @@ git commit -m "Auto-dismount and re-embed WinRE image when dismounting install.w
 
 No new automated test: `ISOService.CreateBootableISO` requires a real `oscdimg.exe`/`mkisofs` and a real media folder to produce a real ISO, which is verified manually in Step 3 (consistent with the spec's Testing section).
 
-- [ ] **Step 1: Write the cmdlet**
+- [x] **Step 1: Write the cmdlet**
 
 ```csharp
 using System;
@@ -1218,7 +1218,7 @@ namespace PSWindowsImageTools.Cmdlets
 }
 ```
 
-- [ ] **Step 2: Add `New-WindowsISO` to the module manifest**
+- [x] **Step 2: Add `New-WindowsISO` to the module manifest**
 
 In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, in the `CmdletsToExport` array, add to the `# ISO Media Management` group created in Task 2:
 
@@ -1228,12 +1228,12 @@ In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, in the `CmdletsToExpor
         'New-WindowsISO',
 ```
 
-- [ ] **Step 3: Build to confirm everything compiles**
+- [x] **Step 3: Build to confirm everything compiles**
 
 Run: `dotnet build src/PSWindowsImageTools.csproj`
 Expected: Build succeeded, 0 errors
 
-- [ ] **Step 4: Manual verification (requires Windows ADK's oscdimg.exe or mkisofs installed)**
+- [x] **Step 4: Manual verification (requires Windows ADK's oscdimg.exe or mkisofs installed)**
 
 ```powershell
 Import-Module .\Module\PSWindowsImageTools\PSWindowsImageTools.psd1 -Force
@@ -1241,7 +1241,7 @@ New-WindowsISO -SourcePath C:\Media\Win11 -DestinationPath C:\ISO\Win11-serviced
 Test-Path C:\ISO\Win11-serviced.iso   # expect True
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/Cmdlets/NewWindowsISOCmdlet.cs Module/PSWindowsImageTools/PSWindowsImageTools.psd1
@@ -1265,7 +1265,7 @@ git commit -m "Add New-WindowsISO to build bootable ISOs from serviced media"
 
 This service talks to Microsoft's real, undocumented `software-download-connector` API (session registration, an `ov-df.microsoft.com` bot-detection challenge, then SKU/link lookups) — it cannot be exercised in a unit test. Only the pure parsing/selection logic in `WindowsISODownloadParser` is unit tested here; the live flow is verified manually in Step 5.
 
-- [ ] **Step 1: Write the failing parser tests**
+- [x] **Step 1: Write the failing parser tests**
 
 ```csharp
 using System;
@@ -1374,12 +1374,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WindowsISODownloadParserTests"`
 Expected: FAIL (build error — `WindowsISODownloadParser` does not exist yet)
 
-- [ ] **Step 3: Write the model and parser**
+- [x] **Step 3: Write the model and parser**
 
 `src/Models/WindowsISODownloadInfo.cs`:
 
@@ -1529,12 +1529,12 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj --filter "FullyQualifiedName~WindowsISODownloadParserTests"`
 Expected: PASS (12 tests)
 
-- [ ] **Step 5: Write the download service (network orchestration — not unit tested, see rationale above)**
+- [x] **Step 5: Write the download service (network orchestration — not unit tested, see rationale above)**
 
 `src/Services/WindowsISODownloadService.cs`:
 
@@ -1700,7 +1700,7 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 6: Write the cmdlet**
+- [x] **Step 6: Write the cmdlet**
 
 ```csharp
 using System;
@@ -1768,7 +1768,7 @@ namespace PSWindowsImageTools.Cmdlets
 }
 ```
 
-- [ ] **Step 7: Add `Get-WindowsISODownloadInfo` to the module manifest**
+- [x] **Step 7: Add `Get-WindowsISODownloadInfo` to the module manifest**
 
 In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, add to the `# ISO Media Management` group:
 
@@ -1779,19 +1779,19 @@ In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, add to the `# ISO Medi
         'Get-WindowsISODownloadInfo',
 ```
 
-- [ ] **Step 8: Build to confirm everything compiles**
+- [x] **Step 8: Build to confirm everything compiles**
 
 Run: `dotnet build src/PSWindowsImageTools.csproj`
 Expected: Build succeeded, 0 errors
 
-- [ ] **Step 9: Manual verification (requires live internet access; may fail if Microsoft's Sentinel bot-detection flags the request — that's the documented risk in the spec)**
+- [x] **Step 9: Manual verification (requires live internet access; may fail if Microsoft's Sentinel bot-detection flags the request — that's the documented risk in the spec)**
 
 ```powershell
 Import-Module .\Module\PSWindowsImageTools\PSWindowsImageTools.psd1 -Force
 Get-WindowsISODownloadInfo -Architecture x64 -Verbose
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add src/Models/WindowsISODownloadInfo.cs src/Services/WindowsISODownloadParser.cs src/Services/WindowsISODownloadService.cs src/Cmdlets/GetWindowsISODownloadInfoCmdlet.cs Module/PSWindowsImageTools/PSWindowsImageTools.psd1 tests/PSWindowsImageTools.Tests/WindowsISODownloadParserTests.cs
@@ -1813,7 +1813,7 @@ git commit -m "Add Get-WindowsISODownloadInfo to resolve the latest official Win
 
 No new automated test: this performs a real multi-gigabyte HTTP download, which isn't practical to exercise in the unit test suite. Verified manually in Step 3.
 
-- [ ] **Step 1: Add `DownloadFileWithResume` to `NetworkService`**
+- [x] **Step 1: Add `DownloadFileWithResume` to `NetworkService`**
 
 In `src/Services/NetworkService.cs`, add this method to the `NetworkService` class (after `DownloadFile`):
 
@@ -1913,7 +1913,7 @@ In `src/Services/NetworkService.cs`, add this method to the `NetworkService` cla
         }
 ```
 
-- [ ] **Step 2: Write the cmdlet**
+- [x] **Step 2: Write the cmdlet**
 
 ```csharp
 using System;
@@ -2017,7 +2017,7 @@ namespace PSWindowsImageTools.Cmdlets
 }
 ```
 
-- [ ] **Step 3: Add `Save-WindowsISO` to the module manifest**
+- [x] **Step 3: Add `Save-WindowsISO` to the module manifest**
 
 In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, add to the `# ISO Media Management` group:
 
@@ -2029,17 +2029,17 @@ In `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`, add to the `# ISO Medi
         'Save-WindowsISO',
 ```
 
-- [ ] **Step 4: Build to confirm everything compiles**
+- [x] **Step 4: Build to confirm everything compiles**
 
 Run: `dotnet build src/PSWindowsImageTools.csproj`
 Expected: Build succeeded, 0 errors
 
-- [ ] **Step 5: Run the full test suite**
+- [x] **Step 5: Run the full test suite**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj`
 Expected: PASS (all tests, including every test added in Tasks 1, 2, 3, and 7)
 
-- [ ] **Step 6: Manual end-to-end verification (requires live internet access and administrator rights)**
+- [x] **Step 6: Manual end-to-end verification (requires live internet access and administrator rights)**
 
 ```powershell
 Import-Module .\Module\PSWindowsImageTools\PSWindowsImageTools.psd1 -Force
@@ -2066,7 +2066,7 @@ Test-Path (Join-Path $mounted2.WinRE.MountPath.FullName 'winre-marker.txt')     
 $mounted2 | Dismount-WindowsImageList -Discard
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/Services/NetworkService.cs src/Cmdlets/SaveWindowsISOCmdlet.cs Module/PSWindowsImageTools/PSWindowsImageTools.psd1
