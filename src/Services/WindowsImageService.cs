@@ -151,35 +151,28 @@ namespace PSWindowsImageTools.Services
             {
                 _callbacks.Verbose?.Invoke($"Unmounting image from {mountPath} (CommitChanges: {commitChanges})");
 
-                var unmountFlags = commitChanges
-                    ? DismNativeApi.UnmountFlags.DISM_COMMIT_IMAGE
-                    : DismNativeApi.UnmountFlags.DISM_DISCARD_IMAGE;
-
                 try
                 {
-                    DismNativeApi.DismUnmountImage(
+                    // Microsoft.Dism's wrapper handles the native call correctly; the raw
+                    // DismNativeApi.DismUnmountImage P/Invoke consistently fails with 0xC142010C
+                    // (WIM provider "could not commit changes during unmount") even for
+                    // read-only discard unmounts that the DISM CLI performs without issue.
+                    Microsoft.Dism.DismApi.UnmountImage(
                         mountPath,
-                        unmountFlags,
-                        IntPtr.Zero, // cancelEvent
-                        WrapProgress(progressCallback, "Unmounting image"),
-                        IntPtr.Zero); // userData
+                        commitChanges,
+                        WrapDismProgress(progressCallback, "Unmounting image"));
                 }
-                catch (Exception ex) when (ex.HResult == HresultImageInUse)
+                catch (DismException ex) when (ex.HResult == HresultImageInUse)
                 {
                     // Image is still in use - allow handles to release and retry once with force discard
                     _callbacks.Verbose?.Invoke("Image in use (0xC142010C), waiting and attempting force discard...");
 
                     System.Threading.Thread.Sleep(500);
 
-                    DismNativeApi.DismUnmountImage(
-                        mountPath,
-                        DismNativeApi.UnmountFlags.DISM_DISCARD_IMAGE,
-                        IntPtr.Zero,
-                        null, // No progress callback for force unmount
-                        IntPtr.Zero);
+                    Microsoft.Dism.DismApi.UnmountImage(mountPath, false);
                 }
 
-                _callbacks.Verbose?.Invoke("Image unmounted successfully using native API");
+                _callbacks.Verbose?.Invoke("Image unmounted successfully");
             }
             catch (Exception ex)
             {
@@ -630,6 +623,37 @@ namespace PSWindowsImageTools.Services
                     if (total > 0)
                     {
                         var percentage = (int)((current * 100) / total);
+                        progressCallback(percentage, $"{operation}: {percentage}%");
+                    }
+                    else
+                    {
+                        progressCallback(-1, $"{operation}...");
+                    }
+                }
+                catch
+                {
+                    // Never throw exceptions from native callback thread
+                }
+            };
+        }
+
+        /// <summary>
+        /// Wraps a percent/status callback into a Microsoft.Dism progress callback that never throws on the native thread
+        /// </summary>
+        private static Microsoft.Dism.DismProgressCallback? WrapDismProgress(Action<int, string>? progressCallback, string operation)
+        {
+            if (progressCallback == null)
+            {
+                return null;
+            }
+
+            return progress =>
+            {
+                try
+                {
+                    if (progress.Total > 0)
+                    {
+                        var percentage = (int)((progress.Current * 100) / progress.Total);
                         progressCallback(percentage, $"{operation}: {percentage}%");
                     }
                     else

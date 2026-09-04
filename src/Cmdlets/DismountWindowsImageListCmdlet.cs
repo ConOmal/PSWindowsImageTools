@@ -32,19 +32,22 @@ namespace PSWindowsImageTools.Cmdlets
         /// <summary>
         /// Save changes made to the mounted images (default is discard)
         /// </summary>
-        [Parameter(Mandatory = false, ParameterSetName = "Save")]
+        [Parameter(Mandatory = false, ParameterSetName = "ByObject")]
+        [Parameter(Mandatory = false, ParameterSetName = "ByPath")]
         public SwitchParameter Save { get; set; }
 
         /// <summary>
         /// Discard changes made to the mounted images (explicit discard)
         /// </summary>
-        [Parameter(Mandatory = false, ParameterSetName = "Discard")]
+        [Parameter(Mandatory = false, ParameterSetName = "ByObject")]
+        [Parameter(Mandatory = false, ParameterSetName = "ByPath")]
         public SwitchParameter Discard { get; set; }
 
         /// <summary>
         /// Append changes to the image (for images with multiple indexes)
         /// </summary>
-        [Parameter(Mandatory = false, ParameterSetName = "Save")]
+        [Parameter(Mandatory = false, ParameterSetName = "ByObject")]
+        [Parameter(Mandatory = false, ParameterSetName = "ByPath")]
         public SwitchParameter Append { get; set; }
 
         /// <summary>
