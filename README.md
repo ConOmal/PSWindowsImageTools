@@ -140,8 +140,6 @@ $mounted | Dismount-WindowsImageList -Save
 ```powershell
 # 1. Setup environment
 Install-ADK -Force
-Set-WindowsImageDatabaseConfiguration -Path "C:\Deployment\tracking.db"
-New-WindowsImageDatabase
 
 # 2. Get latest Windows 11 updates
 $latestRelease = Get-WindowsReleaseInfo -OperatingSystem "Windows 11" -Latest
@@ -265,7 +263,7 @@ We welcome contributions! Please:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ---
 

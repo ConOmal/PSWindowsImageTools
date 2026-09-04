@@ -344,9 +344,6 @@ namespace PSWindowsImageTools.Services
 
             try
             {
-                // Mount the base image and copy its contents to create the installation tree
-                using var dismService = new DismService();
-
                 // For now, create the basic folder structure
                 // In a full implementation, this would mount Image 1 and copy all files
                 CreateWindowsSetupStructure(outputPath, cmdlet);

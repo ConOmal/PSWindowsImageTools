@@ -9,7 +9,6 @@ Complete reference for all cmdlets in the PSWindowsImageTools module.
 - [Windows Update Workflow](#windows-update-workflow)
 - [Image Customization](#image-customization)
 - [Autopilot & Configuration](#autopilot--configuration)
-- [Database Operations](#database-operations)
 - [Release Information](#release-information)
 
 ---
@@ -602,14 +601,144 @@ $release = Get-WindowsReleaseInfo -ReleaseId "22H2"
 
 ---
 
+## Package, Feature & Capability Management
+
+### Get-WindowsImagePackageList
+List packages in mounted images.
+
+```powershell
+$mounted | Get-WindowsImagePackageList [-Filter <regex>]
+```
+
+### Get-WindowsImageFeatureList
+List Windows features in mounted images.
+
+```powershell
+$mounted | Get-WindowsImageFeatureList [-Filter <regex>]
+```
+
+### Add-WindowsImagePackage
+Install .cab/.msu packages into mounted images.
+
+```powershell
+$mounted | Add-WindowsImagePackage -PackagePath "C:\Updates\KB.msu" [-IgnoreCheck] [-PreventPending] [-ContinueOnError]
+```
+
+### Enable-WindowsImageFeature / Disable-WindowsImageFeature
+Enable or disable Windows features in mounted images.
+
+```powershell
+$mounted | Enable-WindowsImageFeature -FeatureName "NetFx3" [-EnableAll] [-SourcePath "C:\Sources"] [-ContinueOnError]
+$mounted | Disable-WindowsImageFeature -FeatureName "Xps-Foundation-Xps-Viewer" [-RemovePayload] [-ContinueOnError]
+```
+
+### Add-WindowsImageCapability / Remove-WindowsImageCapability
+Add or remove capabilities (Features on Demand) in mounted images.
+
+```powershell
+$mounted | Add-WindowsImageCapability -CapabilityName "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0" [-LimitAccess] [-SourcePath "C:\FoD"]
+$mounted | Remove-WindowsImageCapability -CapabilityName "Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0" [-ContinueOnError]
+```
+
+---
+
+## Recipe-Driven Image Builds
+
+### New-WindowsImageRecipe
+Create a recipe scaffold JSON file.
+
+```powershell
+New-WindowsImageRecipe -RecipePath "C:\Recipes\corporate.json" -Name "Corporate Baseline" [-Description] [-Author] [-InclusionExpression "Pro"] [-Force]
+```
+
+### Test-WindowsImageRecipe
+Validate a recipe (structure, regex patterns, referenced paths, image selection).
+
+```powershell
+Test-WindowsImageRecipe -RecipePath "C:\Recipes\corporate.json" [-ImagePath "install.wim"]
+Get-WindowsImageRecipe...  # recipes are plain objects; -Recipe accepts pipeline input
+```
+
+### Invoke-WindowsImageRecipe
+Apply a recipe to matching images: mounts read-write, applies enabled sections in deterministic
+order (AppX removal → file copy → wallpapers → features → drivers → updates → FoD → registry),
+then saves each image.
+
+```powershell
+Invoke-WindowsImageRecipe -RecipePath "C:\Recipes\corporate.json" -ImagePath "install.wim" [-MountPath "C:\Mount"] [-MaxImages 10] [-SkipValidation]
+```
+
+Recipe sections (all optional, enabled per-section):
+```json
+{
+  "metadata": { "name": "Corporate Baseline", "description": "", "version": "1.0.0" },
+  "imageFilter": { "enabled": true, "inclusionExpression": "Pro", "exclusionExpression": "" },
+  "removeAppxPackages": { "enabled": true, "patterns": ["Xbox", "Bing"] },
+  "copyFiles": { "enabled": true, "items": [{ "source": "C:\\Branding\\logo.png", "destination": "Windows\\Branding\\logo.png", "overwrite": true }] },
+  "setWallpapers": { "enabled": false, "wallpaper": "C:\\Branding\\wallpaper.jpg", "lockScreen": "C:\\Branding\\lock.jpg" },
+  "enableFeatures": { "enabled": false, "patterns": ["TelnetClient"] },
+  "integrateDrivers": { "enabled": false, "paths": ["C:\\Drivers"] },
+  "integrateUpdates": { "enabled": false, "paths": ["C:\\Updates\\KB.msu"] },
+  "integrateFeaturesOnDemand": { "enabled": false, "paths": ["Rsat.ActiveDirectory.DS-LDS.Tools~~~~0.0.1.0"] },
+  "registryModifications": { "enabled": false, "modifications": [{ "hive": "HKLM", "key": "SOFTWARE\\Policies\\Test", "valueName": "Enabled", "valueData": "1", "valueType": "DWord" }] }
+}
+```
+
+---
+
+## Image Export & ISO
+
+### Export-WindowsImage
+Export images from a WIM/ESD to a new WIM using the native WIM API.
+
+```powershell
+Export-WindowsImage -SourcePath "install.esd" -DestinationPath "install.wim" [-SourceIndex 2 | -SourceName "Windows 11 Pro"] [-CompressionType Max] [-CheckIntegrity] [-SetBootable] [-DestinationName "Custom Name"] [-Force]
+```
+
+### New-WindowsImageISO
+Create a bootable ISO from a Windows setup folder using oscdimg (Windows ADK).
+
+```powershell
+New-WindowsImageISO -SourcePath "C:\Media\Win11" -OutputIsoPath "C:\Media\Win11.iso" [-VolumeLabel "Windows"] [-BootMode Both] [-Force]
+```
+
+`Get-WindowsImageList -ImagePath "x.iso"` now mounts the ISO automatically and locates the
+installation image file inside it.
+
+---
+
+## Mount Session & One-liner Servicing
+
+### Get-MountedWindowsImage
+Re-discover mounts registered by previous cmdlet runs, including from other PowerShell sessions.
+
+```powershell
+Get-MountedWindowsImage [-Filter <regex>] [-Prune]
+```
+
+### Update-WindowsImageOnline
+One-liner update servicing: discovers the latest cumulative KB for a Windows release, downloads it
+from the Update Catalog, and installs it into the images of a WIM/ESD file.
+
+```powershell
+# Fully automatic: latest Windows 11 KB for x64
+Update-WindowsImageOnline -ImagePath "install.wim"
+
+# Explicit query
+Update-WindowsImageOnline -ImagePath "install.wim" -Query "KB5065429" -Architecture x64
+
+# Pre-downloaded packages (skips catalog step)
+$packages | Update-WindowsImageOnline -ImagePath "install.wim" -MaxImages 3
+```
+
+---
+
 ## Pipeline Examples
 
 ### Complete Enterprise Deployment
 ```powershell
 # Setup environment
 Install-ADK -Force
-Set-WindowsImageDatabaseConfiguration -Path "C:\Deployment\tracking.db"
-New-WindowsImageDatabase
 
 # Get latest updates
 $latestRelease = Get-WindowsReleaseInfo -OperatingSystem "Windows 11" -Latest

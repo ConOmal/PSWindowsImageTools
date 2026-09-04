@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore src/PSWindowsImageTools.csproj
+        shell: pwsh
+
+      - name: Build module
+        run: dotnet build src/PSWindowsImageTools.csproj --no-restore --nologo
+        shell: pwsh
+
+      - name: Test
+        run: >
+          dotnet test tests/PSWindowsImageTools.Tests/PSWindowsImageTools.Tests.csproj
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./TestResults
+        shell: pwsh
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./TestResults/*.trx
+          if-no-files-found: warn

@@ -208,10 +208,10 @@ namespace PSWindowsImageTools.Services
             {
                 LoggingService.WriteVerbose(cmdlet, ServiceName, "Attempting to download oscdimg from Microsoft");
 
-                // Note: This would require finding a legitimate download source
-                // For now, we'll skip this and recommend users install Windows ADK
+                // Note: There is no legitimate standalone oscdimg download source; it ships with
+                // the Windows ADK. Recommend the module's own ADK installer.
                 LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    "oscdimg download not implemented - please install Windows ADK for best ISO creation experience");
+                    "oscdimg download not available - run 'Install-ADK -IncludeDeploymentTools' so oscdimg can be used");
 
                 return false;
             }

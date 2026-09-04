@@ -111,6 +111,18 @@ namespace PSWindowsImageTools.Services.Native
         [DllImport(WimApiDll, SetLastError = true)]
         public static extern bool WIMSetBootImage(IntPtr hWim, uint imageIndex);
 
+        [DllImport(WimApiDll, SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool WIMSetImageName(
+            IntPtr hWim,
+            uint imageIndex,
+            [MarshalAs(UnmanagedType.LPWStr)] string imageName);
+
+        [DllImport(WimApiDll, SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool WIMSetImageDescription(
+            IntPtr hWim,
+            uint imageIndex,
+            [MarshalAs(UnmanagedType.LPWStr)] string imageDescription);
+
         [DllImport(WimApiDll, SetLastError = true)]
         public static extern bool WIMSetReferenceFile(
             IntPtr hWim,

@@ -180,8 +180,8 @@ namespace PSWindowsImageTools.Cmdlets
         {
             LoggingService.WriteVerbose(this, "Getting image list from source ESD file");
 
-            using var dismService = new DismService();
-            var allImages = dismService.GetImageInfo(SourcePath.FullName, this);
+            using var imageService = WindowsImageService.ForCmdlet(this);
+            var allImages = imageService.GetImageInfo(SourcePath.FullName);
 
             var filteredImages = allImages.AsEnumerable();
 

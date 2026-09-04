@@ -26,6 +26,10 @@ bld/
 # Exception: Don't ignore the module's bin directory
 !Module/PSWindowsImageTools/bin/
 
+# Locked working-copy artifacts from dev-time DLL swaps (never commit)
+Module/PSWindowsImageTools/bin/*.old
+Module/PSWindowsImageTools/bin/*.dll.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]
+
 # .NET Core
 project.lock.json
 project.fragment.lock.json

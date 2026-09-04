@@ -27,12 +27,22 @@ namespace PSWindowsImageTools.Services
         /// <returns>Advanced image information collected from the mounted image</returns>
         public WindowsImageAdvancedInfo GetAdvancedImageInfo(string mountPath, PSCmdlet cmdlet)
         {
+            return GetAdvancedImageInfo(mountPath, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Gets advanced registry information from an already-mounted image using callbacks
+        /// </summary>
+        /// <param name="mountPath">Path where the image is already mounted</param>
+        /// <param name="callbacks">Callbacks for logging</param>
+        /// <returns>Advanced image information collected from the mounted image</returns>
+        public WindowsImageAdvancedInfo GetAdvancedImageInfo(string mountPath, ModuleCallbacks callbacks)
+        {
             var advancedInfo = new WindowsImageAdvancedInfo();
 
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Reading advanced registry information from mounted image at: {mountPath}");
+                callbacks.Verbose?.Invoke($"Reading advanced registry information from mounted image at: {mountPath}");
 
                 // Verify the mount path exists and contains a mounted Windows image
                 if (!Directory.Exists(mountPath))
@@ -46,33 +56,32 @@ namespace PSWindowsImageTools.Services
                     throw new InvalidOperationException($"No Windows directory found at mount path. Ensure the image is properly mounted at: {mountPath}");
                 }
 
-                // Read registry information using RegistryPackageService
-                using var registryService = new RegistryPackageService();
+                // Read registry information using RegistryHiveReader
+                using var registryReader = new RegistryHiveReader(callbacks);
+                var softwareHivePath = RegistryHiveReader.GetSoftwareHivePath(mountPath);
 
                 // Get Windows version info
-                var versionInfo = registryService.ReadWindowsVersionInfo(mountPath, cmdlet);
+                var versionInfo = registryReader.GetWindowsVersionInfo(softwareHivePath);
                 foreach (var kvp in versionInfo)
                 {
                     advancedInfo.CurrentVersion[kvp.Key] = kvp.Value;
                 }
 
                 // Get installed software as proper Software objects
-                advancedInfo.Software = registryService.GetInstalledSoftware(mountPath, cmdlet);
+                advancedInfo.Software = registryReader.GetInstalledSoftware(softwareHivePath);
 
                 // Get Windows Update configuration
-                var wuConfig = registryService.ReadWindowsUpdateConfiguration(mountPath, cmdlet);
+                var wuConfig = registryReader.GetWindowsUpdateConfiguration(softwareHivePath);
                 foreach (var kvp in wuConfig)
                 {
                     advancedInfo.WindowsUpdate[kvp.Key] = kvp.Value;
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Successfully collected advanced registry information from mounted image");
+                callbacks.Verbose?.Invoke("Successfully collected advanced registry information from mounted image");
             }
             catch (Exception ex)
             {
-                LoggingService.WriteError(cmdlet, ServiceName,
-                    $"Failed to get advanced registry information: {ex.Message}", ex);
+                callbacks.Error?.Invoke(ex, $"Failed to get advanced registry information: {ex.Message}");
                 throw;
             }
 

@@ -1,60 +1,65 @@
-# Current Work Status - SkipDismount Feature Implementation
+# Current Work Status
 
-## What We're Working On
-Adding SkipDismount parameter to GetWindowsImageListCmdlet to keep images mounted for use with other cmdlets.
+## Completed
 
-## Progress Made
-1. ✅ Added SkipDismount parameter to GetWindowsImageListCmdlet
-2. ✅ Added MountedImage property to WindowsImageInfo model
-3. ✅ Modified AdvancedImageInfoService to return tuple with MountedImage
-4. ✅ Updated DismService to handle new return type
-5. ✅ Added log message when mounting is completed before moving to other tasks
+### Phase 0 — Baseline & Safety Net
+- Solution builds clean (0 warnings); package downgrade fixed (`System.Runtime.CompilerServices.Unsafe` 6.1.2)
+- `tests/PSWindowsImageTools.Tests` (xUnit): 93 tests — format parsers, `.reg` parsing, registry
+  operation model, BuildRecipe/recipe round-trips, RegistryHiveReader (real hives)
+- GitHub Actions CI (`.github/workflows/ci.yml`): build + test on windows-latest
 
-## Current Issue - Registry Service Implementation
-**CRITICAL**: Need to implement RegistryPackageService with ONLY RegistryHiveOnDemand
+### Phase 1 — Hygiene & Correctness
+- **Manifest bug fixed**: `Get-RegistryHiveOnDemand` actually exported now (was listed as the
+  non-existent `Read-RegistryHiveOnDemand`); phantom `Install-WindowsUpdateFile` removed
+- All GC.Collect/Thread.Sleep handle hacks removed — verified `RegistryHiveOnDemand` holds no
+  file handles (parses into memory)
+- Identity aligned (sln renamed, ProjectUri, README = GPL-3.0); stale Windows-Image-Database doc
+  references purged; unused System.Text.Json removed; debug scaffolding removed
 
-### Requirements (User Explicitly Requested):
-1. **Use RegistryHiveOnDemand ONLY** - No fallbacks, no native API
-2. **Structure with category keys**:
-   - `VersionInfo.XXX` - Windows version information
-   - `Software.XXX` - Array of software instances (NOT count)
-   - `WUConfig.XXX` - Windows Update configuration
-3. **For Software: ONLY these 3 properties**:
-   - DisplayName
-   - DisplayVersion  
-   - Publisher
-4. **DO NOT ADD**:
-   - Services info
-   - Computer name
-   - Timezone info
-   - Registry hive exists flags
-   - LastModified dates
-   - Size properties
-   - Any counts or metadata
+### Phase 2 — Architecture Refactor
+- **`ModuleCallbacks`** infrastructure (src/Services/ModuleCallbacks.cs): verbose/warning/error/
+  progress callbacks; services no longer need PSCmdlet (new services are cmdlet-free + testable)
+- **DISM consolidated 2→1**: `WindowsImageService` (src/Services/WindowsImageService.cs, interface
+  `Abstractions/IWindowsImageService.cs`) — managed DISM queries + native mount/unmount with
+  progress + export; single Initialize/Shutdown; mount/unmount THROW with real DISM errors
+  (bool returns eliminated); DismService/NativeDismService deleted
+- **Registry consolidated 6→2+parser**: `RegistryHiveReader` (interface
+  `Abstractions/IRegistryHiveReader.cs`) for reads via RegistryHiveOnDemand with typed access
+  (no reflection); RegistryPackageService + OfflineRegistryService (dead) deleted;
+  RegistryApplicationService + NativeRegistryService remain as the write path
 
-### Current Status:
-- RegistryPackageServiceNew.cs exists with correct implementation
-- Need to rename to RegistryPackageService.cs
-- OfflineRegistryService.cs has fallback removed but may need method name fixes
+### Phase 3 — Finish Half-Built Features
+- **The "HONEST ASSESSMENT" stubs were wrong**: ManagedDism 3.3.12 has the complete API. Implemented
+  the full write set on WindowsImageService: AddPackage, RemovePackageByName, Enable/DisableFeature,
+  Add/RemoveCapability, GetProvisionedAppxPackages/RemoveProvisionedAppxPackage, AddDriversFromDirectory
+- **New cmdlets (12)**: `Get-WindowsImagePackageList`, `Get-WindowsImageFeatureList`,
+  `Add-WindowsImagePackage`, `Enable-WindowsImageFeature`, `Disable-WindowsImageFeature`,
+  `Add-WindowsImageCapability`, `Remove-WindowsImageCapability`,
+  `New-WindowsImageRecipe`, `Test-WindowsImageRecipe`, `Invoke-WindowsImageRecipe`,
+  `Export-WindowsImage`, `New-WindowsImageISO`
+- **BuildRecipe executor** (src/Services/RecipeService.cs): loads JSON recipes, validates structure,
+  selects images by regex, mounts read-write, applies 8 section types in deterministic order, saves.
+  Registry modifications reuse the proven .reg application path
+- **WimExportService TODOs finished**: index-by-name lookup, image count, boot flag
+  (WIMSetBootImage), destination name/description (new WIMSetImageName/WIMSetImageDescription P/Invoke)
+- **ISO support**: `Get-WindowsImageList -ImagePath x.iso` now mounts the ISO (Mount-DiskImage),
+  locates install.wim/install.esd, keeps the ISO mounted for servicing; `New-WindowsImageISO`
+  exposes ISOService (oscdimg path via installed ADK)
 
-### Files Modified:
-- src/Models/WindowsImageInfo.cs - Added MountedImage property
-- src/Services/AdvancedImageInfoService.cs - Modified to return tuple, added mount logging
-- src/Services/DismService.cs - Updated to handle new return type
-- src/Cmdlets/GetWindowsImageListCmdlet.cs - Added SkipDismount parameter
-- src/Services/OfflineRegistryService.cs - Removed fallback to native API
+### Phase 4 — New Capabilities
+- **`Get-MountedWindowsImage`**: cross-session mount registry (JSON state in %TEMP%\PSWindowsImageTools\
+  mounts.json); Mount/Dismount/Get-WindowsImageList-SkipDismount auto-register/unregister; `-Prune` cleans stale entries
+- **`Update-WindowsImageOnline`**: one-liner servicing — auto-discovers latest KB from release
+  history, searches/downloads from the Update Catalog, installs into selected images. Supports
+  pre-downloaded `-UpdatePackages` and explicit `-Query` modes
 
-### Next Steps:
-1. Rename RegistryPackageServiceNew.cs to RegistryPackageService.cs
-2. Build and test the SkipDismount functionality
-3. Verify registry reading uses only RegistryHiveOnDemand with correct structure
-4. Test that mounted images remain accessible for other cmdlets
+## Module Totals
+- 49 exported cmdlets · 93 unit tests passing · build clean (0 warnings)
 
-### User Feedback:
-User has been frustrated with:
-- Adding unwanted properties/metadata
-- Using fallbacks when explicitly asked not to
-- Not using RegistryHiveOnDemand as requested
-- Adding services/computer/timezone info when explicitly told not to
-
-**IMPORTANT**: Follow user requirements exactly - no extra features, no fallbacks, no unwanted properties.
+## Known Remaining Tech Debt
+- Older services (catalog, ADK, INF, wallpaper, unattend, autopilot) still take PSCmdlet — burn
+  down to ModuleCallbacks opportunistically when touched
+- `Compare-WindowsImage` diffing not yet implemented (planned Phase 4 item)
+- Docs drift in CmdletReference for older cmdlets (e.g., Get-PatchTuesday parameters are
+  -Remaining/-All, not -Next as documented); PlatyPS-generated help planned
+- Module bin refresh requires no other PowerShell session holding the DLLs (rename-swap used during dev)

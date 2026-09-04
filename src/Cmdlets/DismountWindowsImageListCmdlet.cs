@@ -209,20 +209,15 @@ namespace PSWindowsImageTools.Cmdlets
 
                 var dismountStartTime = DateTime.UtcNow;
 
-                // Use native DISM service for dismounting with real progress callbacks
-                using var nativeDismService = new NativeDismService();
-                var dismountSuccess = nativeDismService.UnmountImage(
+                // Use unified image service for dismounting with real progress callbacks
+                using var imageService = WindowsImageService.ForCmdlet(this);
+                // (UnmountImage throws on failure with the underlying DISM error)
+                imageService.UnmountImage(
                     mountedImage.MountPath.FullName,
                     shouldSave,
-                    progressCallback: progressCallback,
-                    cmdlet: this);
+                    progressCallback: progressCallback);
 
                 var dismountDuration = DateTime.UtcNow - dismountStartTime;
-
-                if (!dismountSuccess)
-                {
-                    throw new InvalidOperationException($"Failed to dismount image from {mountedImage.MountPath.FullName}");
-                }
 
                 result.Status = MountStatus.Unmounted;
 
@@ -267,7 +262,13 @@ namespace PSWindowsImageTools.Cmdlets
                             LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Force removed mount directory: {mountedImage.MountPath.FullName}");
                         }
                         
-                        result.Status = MountStatus.Unmounted;
+                result.Status = MountStatus.Unmounted;
+
+                // Unregister from the cross-session mount registry
+                if (mountedImage.MountPath != null)
+                {
+                    MountSessionService.Unregister(mountedImage.MountPath.FullName);
+                }
                     }
                     catch (Exception forceEx)
                     {

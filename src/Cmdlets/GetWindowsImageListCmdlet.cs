@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Security.Cryptography;
-using System.Text.Json;
 using PSWindowsImageTools.Models;
 using PSWindowsImageTools.Services;
 
@@ -127,9 +126,9 @@ namespace PSWindowsImageTools.Cmdlets
                 LoggingService.WriteVerbose(this, $"Processing image file: {imageFilePath}");
 
                 // Get basic image information using DISM
-                using (var dismService = new DismService())
+                using (var dismService = WindowsImageService.ForCmdlet(this))
                 {
-                    imageInfoList = dismService.GetImageInfo(imageFilePath, this);
+                    imageInfoList = dismService.GetImageInfo(imageFilePath);
                     LoggingService.WriteVerbose(this, $"Found {imageInfoList.Count} images in file");
 
                     // Apply inclusion filter first (if provided)
@@ -230,7 +229,7 @@ namespace PSWindowsImageTools.Cmdlets
 
                                 try
                                 {
-                                    var (advancedInfo, mountedImage) = dismService.GetAdvancedImageInfo(imageFilePath, imageInfo.Index, mountDir, this, SkipDismount.IsPresent, ReadWrite.IsPresent, progressCallback);
+                                    var (advancedInfo, mountedImage) = dismService.GetAdvancedImageInfo(imageFilePath, imageInfo.Index, mountDir, SkipDismount.IsPresent, ReadWrite.IsPresent, progressCallback);
                                     imageInfo.Advanced = advancedInfo;
                                     imageInfo.MountedImage = mountedImage;
 
@@ -314,23 +313,85 @@ namespace PSWindowsImageTools.Cmdlets
         }
 
         /// <summary>
-        /// Determines the actual image file path, handling ISO files
+        /// Determines the actual image file path, mounting ISO files when needed
         /// </summary>
         /// <param name="inputPath">Input file path</param>
         /// <returns>Path to the WIM/ESD file to process</returns>
         private string GetImageFilePath(string inputPath)
         {
             var extension = Path.GetExtension(inputPath).ToLowerInvariant();
-            
-            if (extension == ".iso")
+
+            if (extension != ".iso")
             {
-                // For ISO files, we need to find the install.wim or install.esd inside
-                // This is a simplified implementation - in reality, you'd mount the ISO
-                LoggingService.WriteVerbose(this, "ISO file detected - this implementation requires the ISO to be already extracted or mounted");
-                throw new NotImplementedException("ISO file processing is not yet implemented. Please extract the ISO and point to the install.wim or install.esd file directly.");
+                return inputPath;
             }
-            
+
+            // Mount the ISO (or reuse an existing mount) and locate the installation image file.
+            // The ISO is intentionally kept mounted so later cmdlets can service the WIM/ESD by path.
+            LoggingService.WriteVerbose(this, "ISO file detected - mounting via Mount-DiskImage");
+
+            var driveLetter = GetMountedISODriveLetter(inputPath);
+
+            if (string.IsNullOrEmpty(driveLetter))
+            {
+                var mountResult = InvokeCommand.InvokeScript(
+                    $"Mount-DiskImage -ImagePath '{inputPath.Replace("'", "''")}' -PassThru | Get-Volume | Select-Object -ExpandProperty DriveLetter");
+                driveLetter = mountResult?.FirstOrDefault()?.ToString();
+            }
+
+            if (string.IsNullOrEmpty(driveLetter))
+            {
+                ThrowTerminatingError(new ErrorRecord(
+                    new InvalidOperationException(
+                        $"Could not mount ISO file: {inputPath}. Ensure the Storage module is available and the file is a valid ISO."),
+                    "ISOMountFailed",
+                    ErrorCategory.OperationStopped,
+                    inputPath));
+            }
+
+            var isoRoot = $"{driveLetter}:\\";
+            LoggingService.WriteVerbose(this, $"ISO mounted at {isoRoot} (kept mounted for image servicing)");
+
+            // Locate the installation image file (prefer WIM, then ESD)
+            foreach (var candidate in new[] { "sources\\install.wim", "sources\\install.esd" })
+            {
+                var candidatePath = Path.Combine(isoRoot, candidate);
+                if (File.Exists(candidatePath))
+                {
+                    LoggingService.WriteVerbose(this, $"Located installation image: {candidatePath}");
+                    return candidatePath;
+                }
+            }
+
+            ThrowTerminatingError(new ErrorRecord(
+                new FileNotFoundException(
+                    $"No sources\\install.wim or sources\\install.esd found on the mounted ISO at {isoRoot}. " +
+                    "Point -ImagePath directly at the WIM/ESD file instead."),
+                "InstallationImageNotFound",
+                ErrorCategory.ObjectNotFound,
+                isoRoot));
             return inputPath;
+        }
+
+        /// <summary>
+        /// Gets the drive letter for an already-mounted ISO, or null when not mounted
+        /// </summary>
+        /// <param name="inputPath">Path to the ISO file</param>
+        /// <returns>Drive letter, or null when the ISO is not mounted</returns>
+        private string? GetMountedISODriveLetter(string inputPath)
+        {
+            try
+            {
+                var script = $"if (Get-DiskImage -ImagePath '{inputPath.Replace("'", "''")}' | Select-Object -ExpandProperty Attached) {{ " +
+                             "Get-DiskImage -ImagePath $args[0] | Get-Volume | Select-Object -ExpandProperty DriveLetter } }";
+                var result = InvokeCommand.InvokeScript(script, new[] { inputPath });
+                return result?.FirstOrDefault()?.ToString();
+            }
+            catch (Exception ex)
+            {
+                LoggingService.WriteVerbose(this, $"Could not query mounted ISO state: {ex.Message}");
+                return null;
+            }
         }
 
 

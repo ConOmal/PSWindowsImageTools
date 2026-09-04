@@ -53,6 +53,8 @@
 
         # ESD/ISO Conversion
         'Convert-ESDToWindowsImage',
+        'Export-WindowsImage',
+        'New-WindowsImageISO',
 
         # Windows Update Workflow
         'Search-WindowsUpdateCatalog',
@@ -68,7 +70,6 @@
         'Add-SetupCompleteAction',
         'Reset-WindowsImageBase',
         'Invoke-MediaDynamicUpdate',
-        'Install-WindowsUpdateFile',
         'Set-WindowsImageWallpaper',
 
         # Driver Management
@@ -85,12 +86,30 @@
         # AppX Package Management
         'Remove-AppXProvisionedPackageList',
 
+        # Package, Feature, and Capability Management
+        'Get-WindowsImagePackageList',
+        'Get-WindowsImageFeatureList',
+        'Add-WindowsImagePackage',
+        'Enable-WindowsImageFeature',
+        'Disable-WindowsImageFeature',
+        'Add-WindowsImageCapability',
+        'Remove-WindowsImageCapability',
+
+        # Recipe-Driven Image Builds
+        'New-WindowsImageRecipe',
+        'Test-WindowsImageRecipe',
+        'Invoke-WindowsImageRecipe',
+
+        # Mount Session & One-liner Servicing
+        'Get-MountedWindowsImage',
+        'Update-WindowsImageOnline',
+
 
 
         # Registry Operations
         'Get-RegistryOperationList',
         'Write-RegistryOperationList',
-        'Read-RegistryHiveOnDemand',
+        'Get-RegistryHiveOnDemand',
 
         # Autopilot Configuration Management
         'Get-AutopilotConfiguration',
@@ -123,7 +142,7 @@
             LicenseUri = 'https://www.gnu.org/licenses/gpl-3.0.html'
 
             # A URL to the main website for this project.
-            ProjectUri = 'https://github.com/Grace-Solutions/PSWindowsUpdateTools'
+            ProjectUri = 'https://github.com/Grace-Solutions/PSWindowsImageTools'
 
             # ReleaseNotes of this module
             ReleaseNotes = @'

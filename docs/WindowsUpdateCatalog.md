@@ -263,22 +263,6 @@ $latestRelease = Get-WindowsReleaseInfo -OperatingSystem "Windows 11" -Latest
 $updates = Search-WindowsUpdateCatalog -Query $latestRelease.LatestKBArticle -Architecture x64
 ```
 
-### Database Tracking
-
-```powershell
-# Setup database tracking
-Set-WindowsImageDatabaseConfiguration -Path "C:\Deployment\tracking.db"
-New-WindowsImageDatabase
-
-# All operations will be automatically tracked
-$updates = Search-WindowsUpdateCatalog -Query "Windows 11" -Architecture x64 |
-    Get-WindowsUpdateDownloadUrl |
-    Save-WindowsUpdateCatalogResult -DestinationPath "C:\Updates"
-
-# Query tracking history
-$recentDownloads = Search-WindowsImageDatabase -Operation "Download" -StartDate (Get-Date).AddDays(-7)
-```
-
 ## Troubleshooting
 
 ### Common Issues and Solutions

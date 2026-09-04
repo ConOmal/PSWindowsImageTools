@@ -62,13 +62,12 @@ namespace PSWindowsImageTools.Cmdlets
                 var result = new Dictionary<string, object>();
                 var hiveName = System.IO.Path.GetFileName(Path.FullName);
 
-                using var registryService = new RegistryPackageService();
+                using var registryReader = new RegistryHiveReader(ModuleCallbacks.FromCmdlet(this));
 
                 if (KeyPath != null && KeyPath.Length > 0)
                 {
                     WriteVerbose($"Reading custom key paths: {string.Join(", ", KeyPath)}");
-                    // For custom key paths, use the raw hive reading
-                    result = ReadCustomKeyPaths(Path.FullName, KeyPath);
+                    result = ReadCustomKeyPaths(registryReader, Path.FullName, KeyPath);
                 }
                 else
                 {
@@ -77,18 +76,18 @@ namespace PSWindowsImageTools.Cmdlets
                     if (hiveName.Equals("SOFTWARE", StringComparison.OrdinalIgnoreCase))
                     {
                         WriteVerbose("Reading Windows version information");
-                        var versionInfo = registryService.ReadWindowsVersionInfoFromHive(Path.FullName, this);
+                        var versionInfo = registryReader.GetWindowsVersionInfo(Path.FullName);
                         foreach (var kvp in versionInfo)
                         {
                             result[kvp.Key] = kvp.Value;
                         }
 
                         WriteVerbose("Reading installed software information");
-                        var softwareList = registryService.GetInstalledSoftwareFromHive(Path.FullName, this);
+                        var softwareList = registryReader.GetInstalledSoftware(Path.FullName);
                         result["Software"] = softwareList;
 
                         WriteVerbose("Reading Windows Update configuration");
-                        var wuConfig = registryService.ReadWindowsUpdateConfigurationFromHive(Path.FullName, this);
+                        var wuConfig = registryReader.GetWindowsUpdateConfiguration(Path.FullName);
                         foreach (var kvp in wuConfig)
                         {
                             result[kvp.Key] = kvp.Value;
@@ -113,7 +112,7 @@ namespace PSWindowsImageTools.Cmdlets
             }
         }
 
-        private void ReadRegistryKey(RegistryHiveOnDemand hive, object? key, string currentPath, Dictionary<string, object> result, int currentDepth)
+        private void ReadRegistryKey(Registry.Abstractions.RegistryKey? key, string currentPath, Dictionary<string, object> result, int currentDepth)
         {
             if (key == null || (MaxDepth >= 0 && currentDepth > MaxDepth))
                 return;
@@ -124,34 +123,13 @@ namespace PSWindowsImageTools.Cmdlets
                 var keyData = new Dictionary<string, object>();
                 keyData["KeyPath"] = currentPath;
 
-                // Read values in current key using reflection to access Values property
+                // Read values in current key
                 var values = new Dictionary<string, object>();
-                var valuesProperty = key.GetType().GetProperty("Values");
-                if (valuesProperty != null)
+                foreach (var value in key.Values)
                 {
-                    var valuesCollection = valuesProperty.GetValue(key);
-                    if (valuesCollection != null)
+                    if (!string.IsNullOrEmpty(value.ValueName) && value.ValueData != null)
                     {
-                        foreach (var value in (System.Collections.IEnumerable)valuesCollection)
-                        {
-                            try
-                            {
-                                var valueNameProp = value.GetType().GetProperty("ValueName");
-                                var valueDataProp = value.GetType().GetProperty("ValueData");
-
-                                var valueName = valueNameProp?.GetValue(value) as string;
-                                var valueData = valueDataProp?.GetValue(value);
-
-                                if (!string.IsNullOrEmpty(valueName) && valueData != null)
-                                {
-                                    values[valueName!] = valueData;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                WriteVerbose($"Error reading value: {ex.Message}");
-                            }
-                        }
+                        values[value.ValueName] = value.ValueData;
                     }
                 }
                 keyData["Values"] = values;
@@ -160,7 +138,7 @@ namespace PSWindowsImageTools.Cmdlets
                 var leafName = string.IsNullOrEmpty(currentPath) ? "Root" :
                               currentPath.Contains("\\") ? currentPath.Substring(currentPath.LastIndexOf("\\") + 1) : currentPath;
 
-                // Handle duplicate leaf names by appending the full path
+                // Handle duplicate leaf names by appending a counter
                 var resultKey = leafName;
                 var counter = 1;
                 while (result.ContainsKey(resultKey))
@@ -174,30 +152,19 @@ namespace PSWindowsImageTools.Cmdlets
                 // Read subkeys if depth allows
                 if (MaxDepth < 0 || currentDepth < MaxDepth)
                 {
-                    var subKeysProperty = key.GetType().GetProperty("SubKeys");
-                    if (subKeysProperty != null)
+                    foreach (var subKey in key.SubKeys)
                     {
-                        var subKeysCollection = subKeysProperty.GetValue(key);
-                        if (subKeysCollection != null)
+                        try
                         {
-                            foreach (var subKey in (System.Collections.IEnumerable)subKeysCollection)
+                            if (!string.IsNullOrEmpty(subKey.KeyName))
                             {
-                                try
-                                {
-                                    var keyNameProp = subKey.GetType().GetProperty("KeyName");
-                                    var keyName = keyNameProp?.GetValue(subKey) as string;
-
-                                    if (!string.IsNullOrEmpty(keyName))
-                                    {
-                                        var subKeyPath = string.IsNullOrEmpty(currentPath) ? keyName! : $"{currentPath}\\{keyName}";
-                                        ReadRegistryKey(hive, subKey, subKeyPath, result, currentDepth + 1);
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    WriteVerbose($"Error reading subkey: {ex.Message}");
-                                }
+                                var subKeyPath = string.IsNullOrEmpty(currentPath) ? subKey.KeyName : $"{currentPath}\\{subKey.KeyName}";
+                                ReadRegistryKey(subKey, subKeyPath, result, currentDepth + 1);
                             }
+                        }
+                        catch (Exception ex)
+                        {
+                            WriteVerbose($"Error reading subkey: {ex.Message}");
                         }
                     }
                 }
@@ -208,32 +175,27 @@ namespace PSWindowsImageTools.Cmdlets
             }
         }
 
-        private Dictionary<string, object> ReadCustomKeyPaths(string hivePath, string[] keyPaths)
+        private Dictionary<string, object> ReadCustomKeyPaths(RegistryHiveReader registryReader, string hivePath, string[] keyPaths)
         {
             var result = new Dictionary<string, object>();
 
             try
             {
-                var hive = new RegistryHiveOnDemand(hivePath);
+                var hive = registryReader.OpenHive(hivePath);
 
                 foreach (var keyPath in keyPaths)
                 {
                     if (string.IsNullOrEmpty(keyPath)) continue;
 
-                    var key = hive.GetKey(keyPath);
+                    var key = registryReader.GetKey(hive, keyPath);
                     if (key == null)
                     {
                         WriteWarning($"Registry key not found: {keyPath}");
                         continue;
                     }
 
-                    ReadRegistryKey(hive, key, keyPath, result, 0);
+                    ReadRegistryKey(key, keyPath, result, 0);
                 }
-
-                // Force cleanup
-                hive = null;
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
             }
             catch (Exception ex)
             {

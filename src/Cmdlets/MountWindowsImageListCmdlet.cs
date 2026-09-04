@@ -199,25 +199,23 @@ namespace PSWindowsImageTools.Cmdlets
 
                 var mountStartTime = DateTime.UtcNow;
 
-                // Use native DISM service for mounting with real progress callbacks
-                using var nativeDismService = new NativeDismService();
-                var mountSuccess = nativeDismService.MountImage(
+                // Use unified image service for mounting with real progress callbacks
+                using var imageService = WindowsImageService.ForCmdlet(this);
+                // (MountImage throws on failure with the underlying DISM error)
+                imageService.MountImage(
                     imageInfo.SourcePath,
                     mountPath,
                     (uint)imageInfo.Index,
                     readOnly: !ReadWrite.IsPresent,
-                    progressCallback: progressCallback,
-                    cmdlet: this);
+                    progressCallback: progressCallback);
 
                 var mountDuration = DateTime.UtcNow - mountStartTime;
 
-                if (!mountSuccess)
-                {
-                    throw new InvalidOperationException($"Failed to mount image {imageInfo.Index} from {imageInfo.SourcePath}");
-                }
-
                 mountedImage.Status = MountStatus.Mounted;
                 mountedImage.MountedAt = DateTime.UtcNow;
+
+                // Register for re-discovery across sessions
+                MountSessionService.Register(mountedImage);
 
                 LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Image mounted successfully using native API: {imageInfo.Name} (Duration: {LoggingService.FormatDuration(mountDuration)})");
 

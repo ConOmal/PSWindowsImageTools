@@ -123,8 +123,6 @@ echo Configuration complete
 ```powershell
 # 1. Setup environment
 Install-ADK -Force
-Set-WindowsImageDatabaseConfiguration -Path "C:\Deployment\tracking.db"
-New-WindowsImageDatabase
 
 # 2. Prepare base image
 $images = Get-WindowsImageList -ImagePath "install.wim" | Where-Object { $_.ImageName -like "*Enterprise*" }
@@ -241,19 +239,6 @@ $mounted | Add-INFDriverList -Drivers $allCustomizations.Drivers
 $mounted | Install-WindowsImageUpdate -UpdatePackages $allCustomizations.Updates
 $mounted | Write-RegistryOperationList -Operations $allCustomizations.RegistryOps
 $mounted | Install-AutopilotConfiguration -Configuration $allCustomizations.Autopilot
-```
-
-### Database Tracking
-
-```powershell
-# Enable operation tracking
-Set-WindowsImageDatabaseConfiguration -Path "C:\Deployment\tracking.db"
-New-WindowsImageDatabase
-
-# All customization operations are automatically tracked
-# Query customization history
-$recentCustomizations = Search-WindowsImageDatabase -Operation "Customize" -StartDate (Get-Date).AddDays(-7)
-$recentCustomizations | Format-Table Operation, ImageName, Status, StartTime, Duration
 ```
 
 ## Troubleshooting

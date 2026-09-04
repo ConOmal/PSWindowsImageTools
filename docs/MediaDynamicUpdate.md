@@ -613,16 +613,11 @@ $ProgressPreference = 'Continue'
 $MediaPath = "C:\Media"
 $UpdatesPath = "C:\DynamicUpdates"
 $MountBasePath = "C:\Mount"
-$DatabasePath = "C:\Database\dynamic_updates.db"
 
 # Create required directories
-@($UpdatesPath, $MountBasePath, (Split-Path $DatabasePath -Parent)) | ForEach-Object {
+@($UpdatesPath, $MountBasePath) | ForEach-Object {
     if (-not (Test-Path $_)) { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
 }
-
-# Configure database for operation tracking
-Set-WindowsImageDatabaseConfiguration -Path $DatabasePath
-if (-not (Test-Path $DatabasePath)) { New-WindowsImageDatabase }
 ```
 
 #### Dynamic Update Search Expressions
@@ -1148,7 +1143,7 @@ if (Test-Path $WindowsImagePath) {
 }
 ```
 
-#### Comprehensive Results Reporting and Database Integration
+#### Comprehensive Results Reporting
 
 ```powershell
 # Generate comprehensive operation report
@@ -1211,57 +1206,6 @@ Write-Output "  - Images Processed: $($OverallResults.WindowsImageResults.Images
 Write-Output "  - Successful Operations: $($OverallResults.WindowsImageResults.SuccessfulOperations)"
 Write-Output "  - Failed Operations: $($OverallResults.WindowsImageResults.FailedOperations)"
 Write-Output "  - Success Rate: $($OverallResults.WindowsImageResults.SuccessRate)%"
-
-# Store detailed results in database
-try {
-    Write-Output ""
-    Write-Output "$(Get-Date -Format 'HH:mm:ss'): Storing operation results in database"
-
-    # Store overall operation record
-    $OperationRecord = [PSCustomObject]@{
-        OperationType = 'DynamicUpdate'
-        StartTime = $OverallResults.StartTime
-        EndTime = $OverallResults.EndTime
-        Duration = $OverallResults.TotalDuration.TotalMinutes
-        Status = $OverallResults.OverallStatus
-        PackagesProcessed = $OverallResults.SearchResults.TotalPackagesDownloaded
-        ImagesProcessed = $OverallResults.BootImageResults.ImagesProcessed + $OverallResults.WindowsImageResults.ImagesProcessed
-        SuccessfulOperations = $OverallResults.BootImageResults.SuccessfulOperations + $OverallResults.WindowsImageResults.SuccessfulOperations
-        FailedOperations = $OverallResults.BootImageResults.FailedOperations + $OverallResults.WindowsImageResults.FailedOperations
-        Details = ($OverallResults | ConvertTo-Json -Depth 10)
-    }
-
-    # Store individual operation results
-    $AllOperationResults = @()
-    $AllOperationResults += $BootImageResults
-    $AllOperationResults += $WindowsImageResults
-    $AllOperationResults += $BootImageErrors
-    $AllOperationResults += $WindowsImageErrors
-
-    foreach ($Result in $AllOperationResults) {
-        $DatabaseEntry = [PSCustomObject]@{
-            OperationType = 'DynamicUpdateDetail'
-            Timestamp = $Result.Timestamp
-            ImageType = if ($Result.ImageIndex -le 2) { 'Boot' } else { 'Windows' }
-            ImageIndex = $Result.ImageIndex
-            ImageName = $Result.ImageName
-            UpdateType = $Result.UpdateType
-            UpdateTitle = $Result.UpdateTitle
-            UpdateFile = $Result.UpdateFile
-            Status = $Result.Status
-            Error = if ($Result.Error) { $Result.Error } else { $null }
-        }
-
-        # Store in database (assuming database cmdlets handle the storage)
-        # This would integrate with your existing database functionality
-        Write-Verbose "Storing database entry for $($DatabaseEntry.ImageType) image index $($DatabaseEntry.ImageIndex), update type $($DatabaseEntry.UpdateType)"
-    }
-
-    Write-Output "$(Get-Date -Format 'HH:mm:ss'): Successfully stored $($AllOperationResults.Count) operation records in database"
-}
-catch {
-    Write-Warning "$(Get-Date -Format 'HH:mm:ss'): Failed to store results in database: $($_.Exception.Message)"
-}
 
 # Export detailed results to files for analysis
 try {
@@ -1331,38 +1275,6 @@ if ($OverallResults.OverallStatus -eq 'Success') {
     Write-Error "Dynamic Update operation failed. Review error logs for details."
     exit 2
 }
-```
-
-### Database Query Examples
-
-```powershell
-# Query Dynamic Update operation history
-$DynamicUpdateHistory = Get-WindowsImageDatabaseEntry | Where-Object {
-    $_.OperationType -eq 'DynamicUpdate'
-} | Sort-Object StartTime -Descending
-
-# Get recent update failures
-$RecentFailures = Get-WindowsImageDatabaseEntry | Where-Object {
-    $_.OperationType -eq 'DynamicUpdateDetail' -and
-    $_.Status -eq 'Failed' -and
-    $_.Timestamp -gt (Get-Date).AddDays(-7)
-}
-
-# Generate success rate report by update type
-$SuccessRateByType = Get-WindowsImageDatabaseEntry | Where-Object {
-    $_.OperationType -eq 'DynamicUpdateDetail'
-} | Group-Object UpdateType | ForEach-Object {
-    $Total = $_.Count
-    $Successful = ($_.Group | Where-Object { $_.Status -eq 'Success' }).Count
-    [PSCustomObject]@{
-        UpdateType = $_.Name
-        TotalOperations = $Total
-        SuccessfulOperations = $Successful
-        SuccessRate = [math]::Round(($Successful / $Total) * 100, 2)
-    }
-}
-```
-```
 ```
 
 ## Best Practices Summary

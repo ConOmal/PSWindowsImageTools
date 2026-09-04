@@ -41,7 +41,8 @@ namespace PSWindowsImageTools.Services
             bool setBootable = false,
             string? scratchDirectory = null,
             Action<int, string>? progressCallback = null,
-            PSCmdlet? cmdlet = null)
+            PSCmdlet? cmdlet = null,
+            string? destinationDescription = null)
         {
             // Validate parameters
             if (string.IsNullOrEmpty(sourceImagePath) || !File.Exists(sourceImagePath))
@@ -108,8 +109,15 @@ namespace PSWindowsImageTools.Services
                 uint actualSourceIndex = sourceIndex;
                 if (!string.IsNullOrEmpty(sourceName))
                 {
-                    // TODO: Implement GetWimIndexByName helper method
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Using source name: {sourceName}");
+                    var resolvedIndex = GetWimIndexByName(sourceImagePath, sourceName!, cmdlet);
+                    if (resolvedIndex == null)
+                    {
+                        LoggingService.WriteError(cmdlet, ServiceName, $"No image named '{sourceName}' found in {sourceImagePath}");
+                        return false;
+                    }
+
+                    actualSourceIndex = resolvedIndex.Value;
+                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Resolved source name '{sourceName}' to index {actualSourceIndex}");
                 }
 
                 // Load source image
@@ -206,26 +214,41 @@ namespace PSWindowsImageTools.Services
                     return false;
                 }
 
-                // Set bootable flag if requested
-                if (setBootable)
-                {
-                    // Get the image count to set the last image as bootable
-                    // TODO: Implement GetWimImageCount helper method
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, "Setting image as bootable");
-                }
-
-                // Set destination name if provided
-                if (!string.IsNullOrEmpty(destinationName))
-                {
-                    // Load the exported image to modify its name
-                    // TODO: Implement image name modification
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Setting destination name: {destinationName}");
-                }
-
                 // Unregister callback
                 if (nativeCallback != null)
                 {
                     WimNativeApi.WIMUnregisterMessageCallback(destinationWimHandle, nativeCallback);
+                }
+
+                // Determine the index of the newly exported image (always appended last)
+                uint exportedImageIndex = GetWimImageCount(destinationImagePath, cmdlet);
+                if (exportedImageIndex == 0)
+                {
+                    LoggingService.WriteWarning(cmdlet, ServiceName, "Could not determine exported image count; skipping post-export operations");
+                }
+                else
+                {
+                    // Set bootable flag if requested
+                    if (setBootable)
+                    {
+                        if (WimNativeApi.WIMSetBootImage(destinationWimHandle, exportedImageIndex))
+                        {
+                            LoggingService.WriteVerbose(cmdlet, ServiceName, $"Set image {exportedImageIndex} as bootable");
+                        }
+                        else
+                        {
+                            LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to set image {exportedImageIndex} as bootable");
+                        }
+                    }
+
+                    // Set destination name/description if provided
+                    if (!string.IsNullOrEmpty(destinationName) || !string.IsNullOrEmpty(destinationDescription))
+                    {
+                        if (SetExportedImageName(destinationWimHandle, exportedImageIndex, destinationName, destinationDescription, cmdlet))
+                        {
+                            LoggingService.WriteVerbose(cmdlet, ServiceName, $"Updated destination image {exportedImageIndex} name/description");
+                        }
+                    }
                 }
 
                 LoggingService.LogOperationCompleteWithTimestamp(cmdlet, ServiceName, "WIM Export", exportStartTime,
@@ -252,6 +275,98 @@ namespace PSWindowsImageTools.Services
                 if (sourceWimHandle != IntPtr.Zero)
                     WimNativeApi.WIMCloseHandle(sourceWimHandle);
             }
+        }
+
+        /// <summary>
+        /// Resolves a WIM image index by image name using the DISM API
+        /// </summary>
+        /// <param name="imagePath">Path to the WIM/ESD file</param>
+        /// <param name="imageName">Image name to find (case-insensitive)</param>
+        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
+        /// <returns>Image index, or null when not found</returns>
+        private static uint? GetWimIndexByName(string imagePath, string imageName, PSCmdlet? cmdlet)
+        {
+            try
+            {
+                var imageInfo = Microsoft.Dism.DismApi.GetImageInfo(imagePath);
+
+                foreach (var image in imageInfo)
+                {
+                    if (string.Equals(image.ImageName, imageName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return (uint)image.ImageIndex;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to resolve image name '{imageName}': {ex.Message}");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Counts images in a WIM/ESD file using the DISM API
+        /// </summary>
+        /// <param name="imagePath">Path to the WIM/ESD file</param>
+        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
+        /// <returns>Image count, or 0 when the count could not be determined</returns>
+        private static uint GetWimImageCount(string imagePath, PSCmdlet? cmdlet)
+        {
+            try
+            {
+                return (uint)Microsoft.Dism.DismApi.GetImageInfo(imagePath).Count;
+            }
+            catch (Exception ex)
+            {
+                LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to count images in {imagePath}: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Sets the name and/or description of an exported image via the native WIM API
+        /// </summary>
+        /// <param name="destinationWimHandle">Open destination WIM handle</param>
+        /// <param name="imageIndex">Index of the exported image</param>
+        /// <param name="destinationName">New image name, or null to keep the existing name</param>
+        /// <param name="destinationDescription">New description, or null to keep the existing description</param>
+        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
+        /// <returns>True when all requested updates succeeded</returns>
+        private static bool SetExportedImageName(IntPtr destinationWimHandle, uint imageIndex, string? destinationName, string? destinationDescription, PSCmdlet? cmdlet)
+        {
+            var success = true;
+
+            if (!string.IsNullOrEmpty(destinationName))
+            {
+                if (WimNativeApi.WIMSetImageName(destinationWimHandle, imageIndex, destinationName!))
+                {
+                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Set destination name: {destinationName}");
+                }
+                else
+                {
+                    var error = WimNativeApi.GetLastErrorAsHResult();
+                    LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to set destination name. Error: 0x{error:X8}");
+                    success = false;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(destinationDescription))
+            {
+                if (WimNativeApi.WIMSetImageDescription(destinationWimHandle, imageIndex, destinationDescription!))
+                {
+                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Set destination description: {destinationDescription}");
+                }
+                else
+                {
+                    var error = WimNativeApi.GetLastErrorAsHResult();
+                    LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to set destination description. Error: 0x{error:X8}");
+                    success = false;
+                }
+            }
+
+            return success;
         }
 
         /// <summary>
