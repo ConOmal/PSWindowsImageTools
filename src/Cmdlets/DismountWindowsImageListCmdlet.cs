@@ -178,7 +178,8 @@ namespace PSWindowsImageTools.Cmdlets
                 MountedAt = mountedImage.MountedAt,
                 Status = MountStatus.Unmounting,
                 IsReadOnly = mountedImage.IsReadOnly,
-                ImageSize = mountedImage.ImageSize
+                ImageSize = mountedImage.ImageSize,
+                WinRE = mountedImage.WinRE
             };
 
             try
@@ -194,6 +195,8 @@ namespace PSWindowsImageTools.Cmdlets
                 // Determine save/discard behavior
                 var shouldSave = Save.IsPresent && !Discard.IsPresent;
                 var saveMode = shouldSave ? (Append.IsPresent ? "Save with Append" : "Save") : "Discard";
+
+                DismountEmbeddedWinRE(mountedImage, shouldSave, currentIndex, totalCount);
 
                 LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Dismounting image from {mountedImage.MountPath.FullName} using native DISM API");
                 LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Mode: {saveMode}");
@@ -220,6 +223,9 @@ namespace PSWindowsImageTools.Cmdlets
                 var dismountDuration = DateTime.UtcNow - dismountStartTime;
 
                 result.Status = MountStatus.Unmounted;
+
+                // Unregister from the cross-session mount registry
+                MountSessionService.Unregister(mountedImage.MountPath.FullName);
 
                 LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Image dismounted successfully using native API (Duration: {LoggingService.FormatDuration(dismountDuration)})");
 
@@ -275,8 +281,63 @@ namespace PSWindowsImageTools.Cmdlets
                         LoggingService.WriteWarning(this, $"[{currentIndex} of {totalCount}] - Force cleanup also failed: {forceEx.Message}");
                     }
                 }
-                
+
                 return result;
+            }
+        }
+
+        /// <summary>
+        /// Dismounts a mounted embedded WinRE image first, re-embedding it into the parent when saving
+        /// </summary>
+        private void DismountEmbeddedWinRE(MountedWindowsImage mountedImage, bool shouldSave, int currentIndex, int totalCount)
+        {
+            var winRE = mountedImage.WinRE;
+            if (winRE?.MountPath == null || winRE.Status != MountStatus.Mounted)
+            {
+                return;
+            }
+
+            try
+            {
+                LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Dismounting embedded WinRE image from {winRE.MountPath.FullName}");
+
+                using var winREImageService = WindowsImageService.ForCmdlet(this);
+                winREImageService.UnmountImage(winRE.MountPath.FullName, commitChanges: shouldSave && !winRE.IsReadOnly);
+
+                MountSessionService.Unregister(winRE.MountPath.FullName);
+
+                if (shouldSave && !winRE.IsReadOnly && mountedImage.MountPath != null)
+                {
+                    WinREImageService.ReplaceEmbeddedWinRE(mountedImage.MountPath.FullName, winRE.SourceImagePath);
+                    LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Re-embedded updated WinRE image into parent");
+                }
+
+                winRE.Status = MountStatus.Unmounted;
+            }
+            catch (Exception ex)
+            {
+                LoggingService.WriteWarning(this, $"[{currentIndex} of {totalCount}] - Failed to dismount/re-embed WinRE image: {ex.Message}");
+                winRE.Status = MountStatus.Failed;
+                winRE.ErrorMessage = ex.Message;
+            }
+            finally
+            {
+                try
+                {
+                    if (winRE.MountPath.Exists)
+                    {
+                        winRE.MountPath.Delete(recursive: true);
+                    }
+
+                    if (File.Exists(winRE.SourceImagePath))
+                    {
+                        File.Delete(winRE.SourceImagePath);
+                    }
+                }
+                catch (Exception cleanupEx)
+                {
+                    LoggingService.WriteWarning(this, $"Failed to clean up WinRE mount artifacts: {cleanupEx.Message}");
+                }
             }
         }
     }

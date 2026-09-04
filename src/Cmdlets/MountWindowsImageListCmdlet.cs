@@ -219,13 +219,15 @@ namespace PSWindowsImageTools.Cmdlets
 
                 LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Image mounted successfully using native API: {imageInfo.Name} (Duration: {LoggingService.FormatDuration(mountDuration)})");
 
+                TryMountEmbeddedWinRE(mountedImage, currentIndex, totalCount);
+
                 return mountedImage;
             }
             catch (Exception ex)
             {
                 mountedImage.Status = MountStatus.Failed;
                 mountedImage.ErrorMessage = ex.Message;
-                
+
                 // Clean up mount directory if mount failed
                 try
                 {
@@ -239,8 +241,66 @@ namespace PSWindowsImageTools.Cmdlets
                 {
                     LoggingService.WriteWarning(this, $"Failed to clean up mount directory {mountPath}: {cleanupEx.Message}");
                 }
-                
+
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Detects an embedded winre.wim inside a just-mounted image and mounts it too, exposed as .WinRE
+        /// </summary>
+        private void TryMountEmbeddedWinRE(MountedWindowsImage mountedImage, int currentIndex, int totalCount)
+        {
+            if (mountedImage.MountPath == null)
+            {
+                return;
+            }
+
+            if (!WinREImageService.TryGetEmbeddedWinREPath(mountedImage.MountPath.FullName, out _))
+            {
+                return;
+            }
+
+            var winREWimPath = Path.Combine(
+                Path.GetDirectoryName(mountedImage.MountPath.FullName) ?? Path.GetTempPath(),
+                $"WinRE_{Guid.NewGuid():N}.wim");
+            var winREMountPath = mountedImage.MountPath.FullName + "_WinRE";
+
+            try
+            {
+                LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Found embedded WinRE image, extracting and mounting");
+
+                WinREImageService.ExtractEmbeddedWinRE(mountedImage.MountPath.FullName, winREWimPath);
+
+                using var winREImageService = WindowsImageService.ForCmdlet(this);
+                winREImageService.MountImage(
+                    winREWimPath,
+                    winREMountPath,
+                    imageIndex: 1,
+                    readOnly: mountedImage.IsReadOnly);
+
+                var winRE = new MountedWindowsImage
+                {
+                    MountId = Guid.NewGuid().ToString(),
+                    SourceImagePath = winREWimPath,
+                    ImageIndex = 1,
+                    ImageName = $"{mountedImage.ImageName} (WinRE)",
+                    MountPath = new DirectoryInfo(winREMountPath),
+                    WimGuid = mountedImage.WimGuid,
+                    Status = MountStatus.Mounted,
+                    IsReadOnly = mountedImage.IsReadOnly,
+                    MountedAt = DateTime.UtcNow
+                };
+
+                MountSessionService.Register(winRE);
+                mountedImage.WinRE = winRE;
+
+                LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - WinRE image mounted at {winREMountPath}");
+            }
+            catch (Exception ex)
+            {
+                LoggingService.WriteWarning(this, $"[{currentIndex} of {totalCount}] - Failed to mount embedded WinRE image: {ex.Message}");
+                mountedImage.WinRE = null;
             }
         }
     }

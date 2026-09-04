@@ -79,6 +79,11 @@ namespace PSWindowsImageTools.Models
         public UpdateInstallationResult? LastUpdateResult { get; set; }
 
         /// <summary>
+        /// The embedded WinRE image (Windows\System32\Recovery\Winre.wim) mounted alongside this image, if present
+        /// </summary>
+        public MountedWindowsImage? WinRE { get; set; }
+
+        /// <summary>
         /// Returns a string representation of the mounted image
         /// </summary>
         public override string ToString()
