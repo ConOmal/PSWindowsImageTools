@@ -152,17 +152,17 @@ jobs:
 
       - name: Capture runner OS as the baseline WIM
         run: |
-          $exclusions = @'
-[ExclusionList]
-\pagefile.sys
-\swapfile.sys
-\hiberfil.sys
-\PSWIT-real.wim
-\Windows\Temp
-\Windows\SoftwareDistribution
-\Users\runneradmin\AppData\Local\Temp
-'@
-          Set-Content -Path C:\PSWIT-exclusions.ini -Value $exclusions -Encoding ascii
+          $exclusionLines = @(
+            '[ExclusionList]',
+            '\pagefile.sys',
+            '\swapfile.sys',
+            '\hiberfil.sys',
+            '\PSWIT-real.wim',
+            '\Windows\Temp',
+            '\Windows\SoftwareDistribution',
+            '\Users\runneradmin\AppData\Local\Temp'
+          )
+          Set-Content -Path C:\PSWIT-exclusions.ini -Value $exclusionLines -Encoding ascii
           dism /Capture-Image /ImageFile:C:\PSWIT-real.wim /CaptureDir:C:\ /Name:"Windows 11 Pro IT" /Compress:max /ConfigFile:C:\PSWIT-exclusions.ini
           if ($LASTEXITCODE -ne 0) { throw "DISM capture failed (exit $LASTEXITCODE)" }
           "Captured baseline: {0:N2} GB" -f ((Get-Item C:\PSWIT-real.wim).Length / 1GB)
