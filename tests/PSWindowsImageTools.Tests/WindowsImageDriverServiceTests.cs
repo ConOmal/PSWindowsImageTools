@@ -84,5 +84,44 @@ namespace PSWindowsImageTools.Tests
             Assert.Empty(result.Superseded);
             Assert.Empty(result.DuplicateOem);
         }
+
+        [Fact]
+        public void Compare_DuplicateBlankPublishedNames_DoesNotThrow()
+        {
+            // Two inbox drivers with blank PublishedName should not crash with ArgumentException
+            var current = new List<WindowsImageDriverInfo>
+            {
+                MakeDriver("", "net.inf", "Acme", "1.0.0.0", inBox: true),
+                MakeDriver("", "storage.inf", "Acme", "2.0.0.0", inBox: true)
+            };
+
+            var result = new WindowsImageDriverService().Compare(new List<WindowsImageDriverInfo>(), current);
+
+            Assert.Equal(2, result.Added.Count);
+            Assert.Empty(result.Removed);
+            Assert.Empty(result.Superseded);
+        }
+
+        [Fact]
+        public void Compare_SupersededCheck_IsExistentialNotMaxVersion()
+        {
+            // Reference has both v3.0 and v1.0 of the same driver; current has v2.0
+            // Existential check: v2.0 > v1.0, so it's marked Superseded even though v3.0 > v2.0
+            var reference = new List<WindowsImageDriverInfo>
+            {
+                MakeDriver("oem1.inf", "net.inf", "Acme", "3.0.0.0"),  // Newer version
+                MakeDriver("oem2.inf", "net.inf", "Acme", "1.0.0.0")   // Older version
+            };
+            var current = new List<WindowsImageDriverInfo>
+            {
+                MakeDriver("oem3.inf", "net.inf", "Acme", "2.0.0.0")   // Middle version
+            };
+
+            var result = new WindowsImageDriverService().Compare(reference, current);
+
+            Assert.Single(result.Added);
+            Assert.Single(result.Superseded);
+            Assert.Equal("oem3.inf", result.Superseded[0].PublishedName);
+        }
     }
 }

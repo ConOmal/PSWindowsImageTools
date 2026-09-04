@@ -31,12 +31,12 @@ namespace PSWindowsImageTools.Services
                 CurrentName = current.FirstOrDefault()?.ImageName ?? string.Empty
             };
 
-            var referenceByPublished = reference.ToDictionary(d => d.PublishedName, StringComparer.OrdinalIgnoreCase);
-            var currentByPublished = current.ToDictionary(d => d.PublishedName, StringComparer.OrdinalIgnoreCase);
+            var referencePublishedNames = new HashSet<string>(reference.Select(d => d.PublishedName), StringComparer.OrdinalIgnoreCase);
+            var currentPublishedNames = new HashSet<string>(current.Select(d => d.PublishedName), StringComparer.OrdinalIgnoreCase);
 
             foreach (var driver in current)
             {
-                if (!referenceByPublished.ContainsKey(driver.PublishedName))
+                if (!referencePublishedNames.Contains(driver.PublishedName))
                 {
                     result.Added.Add(driver);
 
@@ -53,7 +53,7 @@ namespace PSWindowsImageTools.Services
 
             foreach (var driver in reference)
             {
-                if (!currentByPublished.ContainsKey(driver.PublishedName))
+                if (!currentPublishedNames.Contains(driver.PublishedName))
                 {
                     result.Removed.Add(driver);
                 }
@@ -71,6 +71,10 @@ namespace PSWindowsImageTools.Services
             return result;
         }
 
+        /// <summary>
+        /// Checks whether the candidate driver beats ANY matching reference entry, not necessarily the highest-versioned one in the group.
+        /// A reference group containing multiple versions of the same driver can produce a Superseded result even when a still-higher reference version was also removed.
+        /// </summary>
         private static bool IsHigherVersion(WindowsImageDriverInfo candidate, List<WindowsImageDriverInfo> reference)
         {
             if (!Version.TryParse(candidate.Version, out var candidateVersion))
