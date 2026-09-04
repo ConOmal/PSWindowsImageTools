@@ -5,20 +5,25 @@ A comprehensive PowerShell module for Windows image management, customization, a
 ## 🚀 Key Features
 
 ### 🖼️ **Advanced Windows Image Management**
-- Mount/unmount WIM and ESD files with native DISM API integration
-- Read-only and read-write mount modes with automatic permission management
-- Robust mount point management with GUID-based temporary directories
-- Advanced image information retrieval with comprehensive registry data extraction
+- Mount/unmount WIM and ESD files with native DISM API integration and real-time progress callbacks
+- Read-only and read-write mount modes with GUID-based mount point management
+- Cross-session mount re-discovery (`Get-MountedWindowsImage`) — mounts survive pipeline breaks
+- Advanced image information retrieval with offline registry data extraction (no hive mounting)
+- ISO input support: point at an `.iso` and the installation image is located automatically
 - Full pipeline support for batch operations with progress tracking
-- Automatic cleanup and error handling with proper resource disposal
 
 ### 📦 **Comprehensive Update Management**
 - Search Microsoft Update Catalog with advanced filtering and KB correlation
 - Download updates with resume capability and integrity verification
 - Install CAB/MSU files into mounted images with validation and progress tracking
-- Dynamic update integration for Windows installation media
-- Patch Tuesday automation with scheduling and rollback capabilities
-- Support for both file-based and pipeline workflows with error handling
+- Dynamic update integration for Windows installation media (SSU → SafeOS → LCU → Setup)
+- **One-liner servicing**: `Update-WindowsImageOnline` discovers the latest KB, downloads, and installs it
+- Patch Tuesday calculation for automation
+
+### 🍳 **Recipe-Driven Image Builds**
+- Declarative JSON recipes: `New-WindowsImageRecipe` → `Test-WindowsImageRecipe` → `Invoke-WindowsImageRecipe`
+- Sections: AppX removal, file copy, wallpapers, feature enablement, driver/update/FoD integration, registry writes
+- Validation of regex patterns, referenced paths, and image selection before execution
 
 ### 🛠️ **ADK Management & Automation**
 - Automatic detection and installation of latest Windows ADK
@@ -27,23 +32,23 @@ A comprehensive PowerShell module for Windows image management, customization, a
 - Enhanced process monitoring with command-line transparency
 
 ### 🔧 **Advanced Image Customization**
-- Registry operations with direct hive reading and mounting/unmounting
-- Driver integration with INF parsing, hardware ID extraction, and validation
+- Package, feature, and capability (Features on Demand) management via DISM API
+- Registry operations with direct hive reading (no mounting) and hive-mounted writes
+- Driver integration with INF parsing and hardware ID extraction
 - Wallpaper and lockscreen configuration with multiple resolution support
 - Native Windows API integration for permission management (TrustedInstaller)
 - Autopilot configuration management with JSON validation
 - Unattend.xml creation, modification, and validation
-- AppX package removal with advanced regex filtering and dependency checking
+- AppX package removal with advanced regex filtering
 - Custom setup actions and first-boot scripts with comprehensive error handling
 
-### 📊 **Enterprise Integration & Features**
-- WSUS and Windows Update for Business support with policy management
-- Active Directory integration for deployment automation
-- Group Policy and registry customization with validation
-- Hardware-specific driver deployment with automatic detection
-- Windows release information and KB correlation with comprehensive reporting
-- PowerShell 5.1 and 7+ compatibility with cross-platform considerations
-- Comprehensive logging, progress reporting, and automated testing workflows
+### 📊 **Auditing, Export & Diffing**
+- `Export-WindowsImage`: WIM export with compression, boot flag, rename, split-ready native API
+- `New-WindowsImageISO`: bootable ISO creation via oscdimg (UEFI/BIOS/Both)
+- `Get-WindowsImageSnapshot` + `Compare-WindowsImage`: inventory snapshots and before/after diffing
+- Windows release information and KB correlation
+- PowerShell 5.1 and 7+ compatibility
+- Full `Get-Help` coverage for every cmdlet, comprehensive logging, and CI-tested builds
 
 ## 🏃‍♂️ Quick Start
 
@@ -68,34 +73,60 @@ $mounted | Install-WindowsImageUpdate -UpdatePackages $updates
 $mounted | Dismount-WindowsImageList -Save
 ```
 
-## 📋 Complete Cmdlet Reference
+### **Recipe-driven build (declarative)**
+```powershell
+New-WindowsImageRecipe -RecipePath "C:\Recipes\corporate.json" -Name "Corporate Baseline" -InclusionExpression "Pro|Enterprise"
+# ... edit the JSON: AppX removal, drivers, updates, wallpapers, registry, FoD ...
+Test-WindowsImageRecipe -RecipePath "C:\Recipes\corporate.json" -ImagePath "install.wim"
+Invoke-WindowsImageRecipe -RecipePath "C:\Recipes\corporate.json" -ImagePath "install.wim"
+```
 
-### **ADK & Component Management**
-| Cmdlet | Description |
-|--------|-------------|
-| `Get-ADKInstallation` | Detect installed Windows ADK versions |
-| `Install-ADK` | Download and install latest ADK with patches |
-| `Uninstall-ADK` | Remove ADK installations |
-| `Get-WinPEOptionalComponent` | Discover available WinPE components |
-| `Add-WinPEOptionalComponent` | Install components into boot images |
+### **One-liner Patch Tuesday servicing**
+```powershell
+# Discovers the latest Windows 11 x64 cumulative update, downloads it, and services every image
+Update-WindowsImageOnline -ImagePath "C:\Images\install.wim"
+```
+
+## 📋 Complete Cmdlet Reference
 
 ### **Image Management**
 | Cmdlet | Description |
 |--------|-------------|
-| `Get-WindowsImageList` | Enumerate images in WIM/ESD files |
+| `Get-WindowsImageList` | Enumerate images in WIM/ESD/ISO files (ISO mounted automatically) |
 | `Mount-WindowsImageList` | Mount images for modification |
-| `Dismount-WindowsImageList` | Unmount and save changes |
-| `Convert-ESDToWindowsImage` | Convert ESD to WIM format |
-| `Reset-WindowsImageBase` | Reset image base and cleanup |
+| `Dismount-WindowsImageList` | Unmount and save or discard changes |
+| `Get-MountedWindowsImage` | Re-discover active mounts across sessions |
+| `Convert-ESDToWindowsImage` | Convert ESD to WIM format or folder layout |
+| `Reset-WindowsImageBase` | Component cleanup for space optimization |
+
+### **Recipe-Driven Builds**
+| Cmdlet | Description |
+|--------|-------------|
+| `New-WindowsImageRecipe` | Create a recipe scaffold JSON file |
+| `Test-WindowsImageRecipe` | Validate recipe structure, patterns, and image selection |
+| `Invoke-WindowsImageRecipe` | Apply a recipe to matching images end-to-end |
 
 ### **Windows Update Workflow**
 | Cmdlet | Description |
 |--------|-------------|
 | `Search-WindowsUpdateCatalog` | Search Microsoft Update Catalog |
 | `Get-WindowsUpdateDownloadUrl` | Extract download URLs |
-| `Save-WindowsUpdateCatalogResult` | Download with resume capability |
+| `Save-WindowsUpdateCatalogResult` | Download with resume and verification |
 | `Install-WindowsImageUpdate` | Install updates into mounted images |
+| `Update-WindowsImageOnline` | One-liner: latest KB → download → install → save |
 | `Get-PatchTuesday` | Calculate Patch Tuesday dates |
+| `Invoke-MediaDynamicUpdate` | Apply Dynamic Updates to installation media |
+
+### **Package, Feature & Capability Management**
+| Cmdlet | Description |
+|--------|-------------|
+| `Get-WindowsImagePackageList` | List DISM packages in mounted images |
+| `Get-WindowsImageFeatureList` | List Windows features in mounted images |
+| `Add-WindowsImagePackage` | Install .cab/.msu packages |
+| `Enable-WindowsImageFeature` | Enable Windows features |
+| `Disable-WindowsImageFeature` | Disable Windows features |
+| `Add-WindowsImageCapability` | Add capabilities (Features on Demand) |
+| `Remove-WindowsImageCapability` | Remove capabilities |
 
 ### **Image Customization**
 | Cmdlet | Description |
@@ -103,13 +134,19 @@ $mounted | Dismount-WindowsImageList -Save
 | `Get-INFDriverList` | Parse INF files and extract driver info |
 | `Add-INFDriverList` | Install drivers into mounted images |
 | `Set-WindowsImageWallpaper` | Configure wallpaper and lockscreen images |
-| `Remove-AppXProvisionedPackageList` | Remove AppX packages with filtering |
-| `Get-RegistryOperationList` | Parse registry files |
-| `Write-RegistryOperationList` | Apply registry operations |
-| `Read-RegistryHiveOnDemand` | Read registry hives without mounting |
+| `Remove-AppXProvisionedPackageList` | Remove AppX packages with regex filtering |
+| `Get-RegistryOperationList` | Parse .reg files into operations |
+| `Write-RegistryOperationList` | Apply registry operations to mounted images |
+| `Get-RegistryHiveOnDemand` | Read offline registry hives without mounting |
 | `Add-SetupCompleteAction` | Add custom first-boot actions |
-| `Install-WindowsUpdateFile` | Install CAB/MSU files into images |
-| `Reset-WindowsImageBase` | Reset image base for space optimization |
+
+### **Auditing, Export & Diffing**
+| Cmdlet | Description |
+|--------|-------------|
+| `Export-WindowsImage` | Export images to WIM (compression, boot flag, rename) |
+| `New-WindowsImageISO` | Create bootable ISOs via oscdimg |
+| `Get-WindowsImageSnapshot` | Capture inventory snapshots (JSON export) |
+| `Compare-WindowsImage` | Diff two snapshots (added/removed/changed) |
 
 ### **Autopilot & Configuration**
 | Cmdlet | Description |
@@ -119,15 +156,20 @@ $mounted | Dismount-WindowsImageList -Save
 | `Export-AutopilotConfiguration` | Save Autopilot configuration |
 | `Install-AutopilotConfiguration` | Apply to mounted images |
 | `New-AutopilotConfiguration` | Create new configuration |
+| `Get-UnattendXMLConfiguration` | Load and inspect unattend.xml |
+| `Set-UnattendXMLConfiguration` | Modify unattend.xml elements |
+| `Export-UnattendXMLConfiguration` | Save unattend.xml |
+| `New-UnattendXMLConfiguration` | Create new unattend.xml |
 | `Install-UnattendXMLConfiguration` | Apply unattend.xml to images |
 
-### **WinPE & Optional Components**
+### **ADK & WinPE Management**
 | Cmdlet | Description |
 |--------|-------------|
-| `Add-WinPEOptionalComponent` | Add optional components to WinPE |
-| `Invoke-MediaDynamicUpdate` | Apply dynamic updates to installation media |
-
-
+| `Get-ADKInstallation` | Detect installed Windows ADK versions |
+| `Install-ADK` | Download and install latest ADK with patches |
+| `Uninstall-ADK` | Remove ADK installations |
+| `Get-WinPEOptionalComponent` | Discover available WinPE components |
+| `Add-WinPEOptionalComponent` | Install components into boot images |
 
 ### **Release Information**
 | Cmdlet | Description |

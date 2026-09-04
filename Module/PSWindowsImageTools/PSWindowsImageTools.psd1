@@ -3,7 +3,7 @@
     RootModule = 'bin\PSWindowsImageTools.dll'
 
     # Version number of this module.
-    ModuleVersion = '2025.07.09.1'
+    ModuleVersion = '2025.09.04.1'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -140,7 +140,7 @@
     PrivateData = @{
         PSData = @{
             # Tags applied to this module. These help with module discovery in online galleries.
-            Tags = @('Windows', 'Image', 'WIM', 'ESD', 'ISO', 'DISM', 'Customization', 'Updates', 'WindowsUpdate', 'Catalog', 'PowerShell')
+            Tags = @('Windows', 'Image', 'WIM', 'ESD', 'ISO', 'DISM', 'Customization', 'Updates', 'WindowsUpdate', 'Catalog', 'Autopilot', 'Unattend', 'Drivers', 'WinPE', 'ADK', 'Recipe', 'PowerShell')
 
             # A URL to the license for this module.
             LicenseUri = 'https://www.gnu.org/licenses/gpl-3.0.html'
@@ -150,29 +150,30 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-Major architectural improvements and new Windows Update workflow:
+Modernized architecture and major feature expansion:
 
-NEW FEATURES:
-• Complete Windows Update architecture redesign with proper object models
-• Search-WindowsUpdateCatalog: Search Microsoft Update Catalog with filters
-• Save-WindowsUpdateCatalogResult: Download catalog results to packages
-• Install-WindowsImageUpdate: Install packages on mounted images (redesigned)
-• Full pipeline support: Search → Download → Install workflow
+NEW CMDLETS (18):
+• Recipe-driven builds: New/Test/Invoke-WindowsImageRecipe (declarative JSON image builds)
+• Package/feature management: Get-WindowsImagePackageList, Get-WindowsImageFeatureList,
+  Add-WindowsImagePackage, Enable/Disable-WindowsImageFeature, Add/Remove-WindowsImageCapability
+• Export-WindowsImage (native WIM API: compression, boot flag, rename, index-by-name)
+• New-WindowsImageISO (bootable ISOs via oscdimg)
+• Get-MountedWindowsImage (cross-session mount registry)
+• Update-WindowsImageOnline (one-liner: latest KB discovery, download, install)
+• Image diffing: Get-WindowsImageSnapshot + Compare-WindowsImage (before/after audits)
 
 IMPROVEMENTS:
-• Migrated to .NET Standard 2.0 for better PowerShell compatibility
-• Reduced bin folder from 200+ files to 8 essential DLLs
-• Fixed all build warnings and security vulnerabilities
-• Consistent InputObject parameter naming for pipeline support
-• All path parameters use DirectoryInfo/FileInfo types
-• Removed shell-outs, pure DISM API usage throughout
-• Enhanced logging with human-readable timestamps and durations
+• Unified DISM service: single API lifecycle, native progress callbacks, real error HRESULTs
+• Consolidated registry services: in-memory hive reads (no mounting, no file handles)
+• ISO input support in Get-WindowsImageList
+• Full DISM write API implemented (packages, features, capabilities, AppX, drivers)
+• Full Get-Help coverage for every cmdlet (PlatyPS-generated)
+• 99 unit tests with CI; complete documentation rewrite
 
-ARCHITECTURE:
-• Clean separation between catalog results and downloaded packages
-• Type-safe object models with proper PowerShell patterns
-
-• Comprehensive examples and workflow documentation
+FIXES:
+• Get-RegistryHiveOnDemand is now actually exported (was silently missing)
+• Mount/unmount failures carry real DISM error messages
+• Removed all GC-based handle workarounds
 '@
         }
     }

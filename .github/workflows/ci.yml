@@ -34,6 +34,17 @@ jobs:
           --results-directory ./TestResults
         shell: pwsh
 
+      - name: Verify cmdlet help coverage
+        run: |
+          Import-Module ./Module/PSWindowsImageTools/PSWindowsImageTools.psd1 -Force
+          $commands = Get-Command -Module PSWindowsImageTools
+          $missing = $commands | Where-Object { -not (Get-Help $_.Name).Synopsis }
+          if ($missing) {
+            throw "Missing help for: $($missing.Name -join ', ')"
+          }
+          Write-Output "All $($commands.Count) cmdlets have help coverage"
+        shell: pwsh
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
