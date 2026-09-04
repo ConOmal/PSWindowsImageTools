@@ -83,6 +83,7 @@
         'Get-WindowsImageDriver',
         'Remove-WindowsImageDriver',
         'Compare-WindowsImageDriver',
+        'Export-WindowsImageDriver',
 
         # ADK and Optional Component Management
         'Get-ADKInstallation',

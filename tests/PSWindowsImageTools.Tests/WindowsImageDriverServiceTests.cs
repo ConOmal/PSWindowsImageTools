@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using PSWindowsImageTools.Models;
 using PSWindowsImageTools.Services;
@@ -122,6 +123,53 @@ namespace PSWindowsImageTools.Tests
             Assert.Single(result.Added);
             Assert.Single(result.Superseded);
             Assert.Equal("oem3.inf", result.Superseded[0].PublishedName);
+        }
+
+        [Theory]
+        [InlineData(@"C:\Mount", @"C:\Mount\Windows\System32\DriverStore\FileRepository\net_acme\net.cat", @"C:\Mount\Windows\System32\DriverStore\FileRepository\net_acme")]
+        [InlineData(@"C:\Mount", @"Windows\System32\DriverStore\FileRepository\net_acme\net.cat", @"C:\Mount\Windows\System32\DriverStore\FileRepository\net_acme")]
+        public void ResolveDriverSourceDirectory_HandlesAbsoluteAndRelativeCatalogPaths(string mountPath, string catalogFile, string expected)
+        {
+            var resolved = WindowsImageDriverService.ResolveDriverSourceDirectory(mountPath, catalogFile);
+            Assert.Equal(expected, resolved, ignoreCase: true);
+        }
+
+        [Fact]
+        public void ResolveDriverSourceDirectory_NullCatalogFile_ReturnsNull()
+        {
+            Assert.Null(WindowsImageDriverService.ResolveDriverSourceDirectory(@"C:\Mount", null));
+        }
+
+        [Fact]
+        public void Export_CopiesDriverFilesToDestination()
+        {
+            var mountPath = Path.Combine(Path.GetTempPath(), "PSWIT-Tests-" + Guid.NewGuid().ToString("N"));
+            var driverFolder = Path.Combine(mountPath, "Windows", "System32", "DriverStore", "FileRepository", "net_acme");
+            var destination = Path.Combine(Path.GetTempPath(), "PSWIT-Tests-Dest-" + Guid.NewGuid().ToString("N"));
+
+            Directory.CreateDirectory(driverFolder);
+            File.WriteAllText(Path.Combine(driverFolder, "net.inf"), "; fake inf");
+            File.WriteAllText(Path.Combine(driverFolder, "net.cat"), "fake catalog");
+
+            try
+            {
+                var driver = new WindowsImageDriverInfo
+                {
+                    PublishedName = "oem1.inf",
+                    MountPath = mountPath,
+                    CatalogFile = Path.Combine(driverFolder, "net.cat")
+                };
+
+                new WindowsImageDriverService().Export(driver, new DirectoryInfo(destination));
+
+                var copiedInf = Path.Combine(destination, "net_acme", "net.inf");
+                Assert.True(File.Exists(copiedInf));
+            }
+            finally
+            {
+                if (Directory.Exists(mountPath)) Directory.Delete(mountPath, true);
+                if (Directory.Exists(destination)) Directory.Delete(destination, true);
+            }
         }
     }
 }

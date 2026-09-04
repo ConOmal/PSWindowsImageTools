@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using PSWindowsImageTools.Models;
@@ -168,6 +169,65 @@ namespace PSWindowsImageTools.Cmdlets
             catch (Exception ex)
             {
                 ThrowTerminatingError(new ErrorRecord(ex, "CompareWindowsImageDriverFailed", ErrorCategory.OperationStopped, ComponentName));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Exports driver package files from a mounted Windows image to a destination directory
+    /// </summary>
+    [Cmdlet(VerbsData.Export, "WindowsImageDriver")]
+    [OutputType(typeof(void))]
+    public class ExportWindowsImageDriverCmdlet : PSCmdlet
+    {
+        private const string ComponentName = "Export-WindowsImageDriver";
+        private readonly List<WindowsImageDriverInfo> _allDrivers = new List<WindowsImageDriverInfo>();
+
+        [Parameter(Mandatory = true, Position = 0, ValueFromPipeline = true, HelpMessage = "Driver(s) to export, from Get-WindowsImageDriver")]
+        [ValidateNotNull]
+        public WindowsImageDriverInfo[] Driver { get; set; } = Array.Empty<WindowsImageDriverInfo>();
+
+        [Parameter(Mandatory = true, Position = 1, HelpMessage = "Destination directory for exported driver files")]
+        [ValidateNotNull]
+        public DirectoryInfo DestinationPath { get; set; } = null!;
+
+        [Parameter(HelpMessage = "Continue processing other drivers if one fails")]
+        public SwitchParameter ContinueOnError { get; set; }
+
+        protected override void ProcessRecord()
+        {
+            _allDrivers.AddRange(Driver);
+        }
+
+        protected override void EndProcessing()
+        {
+            if (_allDrivers.Count == 0)
+            {
+                LoggingService.WriteWarning(this, "No drivers provided for export");
+                return;
+            }
+
+            if (!DestinationPath.Exists)
+            {
+                DestinationPath.Create();
+            }
+
+            var driverService = new WindowsImageDriverService(ModuleCallbacks.FromCmdlet(this));
+
+            foreach (var driver in _allDrivers)
+            {
+                try
+                {
+                    driverService.Export(driver, DestinationPath);
+                }
+                catch (Exception ex)
+                {
+                    LoggingService.WriteError(this, ComponentName, $"Failed to export driver {driver.PublishedName}: {ex.Message}", ex);
+                    if (!ContinueOnError.IsPresent)
+                    {
+                        throw;
+                    }
+                }
             }
         }
     }

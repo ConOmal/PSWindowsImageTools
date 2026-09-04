@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using PSWindowsImageTools.Models;
 
@@ -100,6 +101,51 @@ namespace PSWindowsImageTools.Services
                 MountPath = mountPath,
                 CatalogFile = d.CatalogFile
             }).ToList();
+        }
+
+        /// <summary>
+        /// Resolves the on-disk directory containing a driver's files from its DISM-reported
+        /// catalog path, handling both absolute paths and paths relative to the image root. Pure.
+        /// </summary>
+        internal static string? ResolveDriverSourceDirectory(string mountPath, string? catalogFilePath)
+        {
+            if (string.IsNullOrEmpty(catalogFilePath))
+            {
+                return null;
+            }
+
+            var fullCatalogPath = Path.IsPathRooted(catalogFilePath)
+                ? catalogFilePath
+                : Path.Combine(mountPath, catalogFilePath.TrimStart('\\', '/'));
+
+            return Path.GetDirectoryName(fullCatalogPath);
+        }
+
+        /// <summary>
+        /// Copies a driver's on-disk file repository folder to a destination directory
+        /// </summary>
+        public void Export(WindowsImageDriverInfo driver, DirectoryInfo destination)
+        {
+            var sourceDirectory = ResolveDriverSourceDirectory(driver.MountPath, driver.CatalogFile);
+
+            if (sourceDirectory == null || !Directory.Exists(sourceDirectory))
+            {
+                throw new DirectoryNotFoundException(
+                    $"Could not resolve on-disk source directory for driver {driver.PublishedName} (catalog: {driver.CatalogFile ?? "none"})");
+            }
+
+            var driverDestination = Path.Combine(destination.FullName, Path.GetFileName(sourceDirectory));
+            Directory.CreateDirectory(driverDestination);
+
+            foreach (var file in Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+            {
+                var relativePath = file.Substring(sourceDirectory.Length).TrimStart(Path.DirectorySeparatorChar);
+                var targetPath = Path.Combine(driverDestination, relativePath);
+                Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                File.Copy(file, targetPath, overwrite: true);
+            }
+
+            _callbacks.Verbose?.Invoke($"Exported driver {driver.PublishedName} to {driverDestination}");
         }
 
         /// <summary>

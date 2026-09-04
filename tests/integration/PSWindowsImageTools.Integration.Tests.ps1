@@ -363,6 +363,26 @@ Describe "Integration: image drivers" -Tag Integration {
             $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
         }
     }
+
+    It "exports a driver's files to a destination directory" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+        $exportDest = Join-Path $Workspace "driver-export"
+
+        try {
+            $drivers = $mounted | Get-WindowsImageDriver
+            if ($drivers.Count -gt 0) {
+                $drivers | Select-Object -First 1 | Export-WindowsImageDriver -DestinationPath $exportDest
+                (Get-ChildItem $exportDest -Recurse -File).Count | Should -BeGreaterThan 0
+            }
+            else {
+                Set-ItResult -Skipped -Because "synthetic baseline image has no third-party drivers to export"
+            }
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Describe "Integration: driver comparison" -Tag Integration {
