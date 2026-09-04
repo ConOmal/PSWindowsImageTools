@@ -100,6 +100,9 @@
         'Add-WindowsImageCapability',
         'Remove-WindowsImageCapability',
 
+        # Component Store Analysis
+        'Get-WindowsImageComponentStore',
+
         # Recipe-Driven Image Builds
         'New-WindowsImageRecipe',
         'Test-WindowsImageRecipe',

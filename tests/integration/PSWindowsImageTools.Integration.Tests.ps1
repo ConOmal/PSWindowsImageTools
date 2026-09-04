@@ -291,3 +291,22 @@ Describe "Integration: error contracts" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: component store" -Tag Integration {
+
+    It "reports package counts and WinSxS size for a mounted image" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $report = $mounted | Get-WindowsImageComponentStore
+            $report | Should -Not -BeNullOrEmpty
+            $report.ImageName | Should -Be $mounted.ImageName
+            $report.TotalPackages | Should -BeGreaterOrEqual 0
+            $report.WinSxSSizeMB | Should -BeGreaterOrEqual 0
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
