@@ -63,7 +63,7 @@ $updates = Search-WindowsUpdateCatalog -Query "Windows 11 Cumulative" -Architect
     Save-WindowsUpdateCatalogResult -DestinationPath "C:\Updates"
 
 # Mount, customize, and update image
-$mounted = $images | Mount-WindowsImageList -MountPath "C:\Mount" -ReadWrite
+$mounted = $images | Mount-WindowsImageList -MountRoot "C:\Mount" -ReadWrite
 $mounted | Install-WindowsImageUpdate -UpdatePackages $updates
 $mounted | Dismount-WindowsImageList -Save
 ```
@@ -142,14 +142,14 @@ $mounted | Dismount-WindowsImageList -Save
 Install-ADK -Force
 
 # 2. Get latest Windows 11 updates
-$latestRelease = Get-WindowsReleaseInfo -OperatingSystem "Windows 11" -Latest
-$updates = Search-WindowsUpdateCatalog -Query $latestRelease.LatestKBArticle -Architecture x64 |
+$latestRelease = Get-WindowsReleaseInfo -After (Get-Date).AddDays(-60) -Detailed
+$updates = Search-WindowsUpdateCatalog -Query "Windows 11 Cumulative" -Architecture x64 |
     Get-WindowsUpdateDownloadUrl |
     Save-WindowsUpdateCatalogResult -DestinationPath "C:\Updates"
 
 # 3. Customize image with drivers and updates
 $images = Get-WindowsImageList -ImagePath "install.wim" | Where-Object { $_.ImageName -like "*Enterprise*" }
-$mounted = $images | Mount-WindowsImageList -MountPath "C:\Mount" -ReadWrite
+$mounted = $images | Mount-WindowsImageList -MountRoot "C:\Mount" -ReadWrite
 
 # Install drivers
 $drivers = Get-INFDriverList -Path "C:\Drivers" -Recurse
@@ -162,7 +162,7 @@ $mounted | Install-WindowsImageUpdate -UpdatePackages $updates
 $mounted | Set-WindowsImageWallpaper -WallpaperPath "C:\Branding\wallpaper.jpg" -LockscreenPath "C:\Branding\lockscreen.jpg"
 
 # Configure Autopilot
-$autopilot = New-AutopilotConfiguration -TenantId "your-tenant-id" -DeviceName "%SERIAL%"
+$autopilot = New-AutopilotConfiguration -TenantId "your-tenant-id" -TenantDomain "your-tenant.onmicrosoft.com" -DeviceName "%SERIAL%"
 $mounted | Install-AutopilotConfiguration -Configuration $autopilot
 
 # Remove unwanted AppX packages
@@ -175,7 +175,7 @@ $mounted | Dismount-WindowsImageList -Save
 ### **Wallpaper and Lockscreen Configuration**
 ```powershell
 # Configure wallpaper and lockscreen for mounted images
-$mounted = Get-WindowsImageList -ImagePath "install.wim" | Mount-WindowsImageList -MountPath "C:\Mount" -ReadWrite
+$mounted = Get-WindowsImageList -ImagePath "install.wim" | Mount-WindowsImageList -MountRoot "C:\Mount" -ReadWrite
 
 # Set both wallpaper and lockscreen
 $mounted | Set-WindowsImageWallpaper -WallpaperPath "C:\Branding\corporate-wallpaper.jpg" -LockscreenPath "C:\Branding\lockscreen.jpg"
@@ -197,11 +197,11 @@ $mounted | Dismount-WindowsImageList -Save
 ### **Automated Patch Tuesday Updates**
 ```powershell
 # Calculate next Patch Tuesday
-$nextPatchTuesday = Get-PatchTuesday -Next
+$nextPatchTuesday = Get-PatchTuesday -Remaining | Select-Object -First 1
 
 # Setup automated download for that date
-$updates = Search-WindowsUpdateCatalog -Query "Cumulative" -Architecture x64 |
-    Where-Object { $_.LastModified.Date -eq $nextPatchTuesday.Date } |
+$updates = Search-WindowsUpdateCatalog -Query "Windows 11 Cumulative" -Architecture x64 |
+    Where-Object { $_.LastUpdated.Date -eq $nextPatchTuesday.Date } |
     Get-WindowsUpdateDownloadUrl |
     Save-WindowsUpdateCatalogResult -DestinationPath "C:\PatchTuesday\$($nextPatchTuesday.Date.ToString('yyyy-MM'))"
 
@@ -219,7 +219,7 @@ $components = Get-WinPEOptionalComponent -ADKInstallation $adk -Category "Script
 
 # Mount WinPE image and add components
 $winpe = Get-WindowsImageList -ImagePath "C:\WinPE\boot.wim"
-$mounted = $winpe | Mount-WindowsImageList -MountPath "C:\WinPE\Mount" -ReadWrite
+$mounted = $winpe | Mount-WindowsImageList -MountRoot "C:\WinPE\Mount" -ReadWrite
 
 # Add PowerShell and networking support
 $mounted | Add-WinPEOptionalComponent -Components ($components | Where-Object { $_.Name -like "*PowerShell*" -or $_.Name -like "*WMI*" })
