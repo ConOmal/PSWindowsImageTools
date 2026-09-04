@@ -36,7 +36,7 @@ namespace PSWindowsImageTools.Services
                 MountPath = mountPath
             };
 
-            CheckCorruption(mountPath, restoreHealth, report);
+            CheckCorruption(mountPath, imageService, restoreHealth, report);
             CheckRegistryHives(mountPath, report);
             CheckComponentStore(mountedImage, imageService, report);
             CheckDrivers(mountedImage, imageService, report);
@@ -44,10 +44,11 @@ namespace PSWindowsImageTools.Services
             return report;
         }
 
-        private void CheckCorruption(string mountPath, bool restoreHealth, HealthCheckReport report)
+        private void CheckCorruption(string mountPath, IWindowsImageService imageService, bool restoreHealth, HealthCheckReport report)
         {
             try
             {
+                imageService.Initialize();
                 using var session = DismApi.OpenOfflineSession(mountPath);
                 var healthState = DismApi.CheckImageHealth(session, scanImage: true);
 
