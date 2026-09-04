@@ -3,7 +3,7 @@
     RootModule = 'bin\PSWindowsImageTools.dll'
 
     # Version number of this module.
-    ModuleVersion = '2025.09.04.1'
+    ModuleVersion = '2026.09.04.1'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')

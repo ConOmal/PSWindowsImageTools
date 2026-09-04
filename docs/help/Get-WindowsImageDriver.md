@@ -37,6 +37,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -ContinueOnError
+Continue processing other images if one fails
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -MountedImages
 Mounted Windows images to enumerate drivers from
 

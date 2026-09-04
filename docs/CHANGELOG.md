@@ -2,6 +2,37 @@
 
 All notable changes to PSWindowsImageTools will be documented in this file.
 
+## [2026.09.04] - Phase 1: Drivers, Component Store, Health Check & SBOM
+
+### Added
+- **8 new cmdlets** (62 total exported):
+  - Driver management: `Get-WindowsImageDriver`, `Add`/`Remove` (via `Remove-WindowsImageDriver`),
+    `Compare-WindowsImageDriver`, `Export-WindowsImageDriver` (per-image and mounted-image driver
+    inventory, INF parsing, add/remove with inbox-filter)
+  - Component store: `Get-WindowsImageComponentStore` (WinSxS analysis: superseded packages, size)
+    and `Optimize-WindowsImageComponentStore` (cleanup with progress)
+  - `Invoke-WindowsImageHealthCheck` (mounted-image health report: drivers, packages, component
+    store, with severity rollup)
+  - `Export-WindowsImageSBOM` (software bill of materials JSON from a snapshot)
+- **17-test integration suite** (`tests/integration/`): real WIM mount/unmount, query, export,
+  recipe, driver, component-store and SBOM round-trips, pinned to Pester 5
+- **PSGallery release pipeline** (`.github/workflows/release.yml`): tag (`v*`) or manual dispatch
+  with `dry_run` → build + unit tests + manifest guard (≥50 exports) → `Publish-Module` using the
+  `PSGALLERY_API_KEY` secret
+
+### Fixed
+- `Dismount-WindowsImageList`: `Save`/`Discard`/`Append` now bind correctly when images arrive via
+  the pipeline (parameters were unreachable in their own parameter sets)
+- `Dismount-WindowsImageList`: unmount now goes through the Microsoft.Dism managed API; the native
+  path always failed with `0xC142010C` (`CWimImage::Save`) on this machine class
+
+### Changed
+- **Help-drift guardrail**: `Scripts/verify-help.ps1` (markdown-per-cmdlet, live-parameter coverage,
+  `New-ExternalHelp` round-trip, shipped-MAML synopsis coverage) runs in CI; help authored for all
+  62 cmdlets and MAML regenerated from source
+- **v2025.09.04.1 published to PSGallery** (54-cmdlet state of main) — first public release; the
+  module is discoverable, installable and loads cleanly (`Find-Module`/`Save-Module`/`Import-Module`)
+
 ## [2025.09.04] - Phase 2-4: Architecture Refactor & Feature Completion
 
 ### Added
