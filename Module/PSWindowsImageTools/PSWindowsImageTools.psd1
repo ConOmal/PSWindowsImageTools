@@ -56,6 +56,10 @@
         'Export-WindowsImage',
         'New-WindowsImageISO',
 
+        # Windows 11 ISO Acquisition
+        'Get-WindowsISODownloadInfo',
+        'Save-WindowsISO',
+
         # Windows Update Workflow
         'Search-WindowsUpdateCatalog',
         'Get-WindowsUpdateDownloadUrl',

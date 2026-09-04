@@ -97,6 +97,129 @@ namespace PSWindowsImageTools.Services
         }
 
         /// <summary>
+        /// Computes the byte offset to resume a download from: 0 if resume is disabled or no partial file
+        /// exists, otherwise the length of the existing partial file
+        /// </summary>
+        /// <param name="destinationPath">Local path the file would be saved to</param>
+        /// <param name="resume">Whether resume is enabled</param>
+        /// <returns>Byte offset to request the download from</returns>
+        public static long ComputeResumeStartPosition(string destinationPath, bool resume)
+        {
+            if (!resume)
+            {
+                return 0;
+            }
+
+            var fileInfo = new FileInfo(destinationPath);
+            return fileInfo.Exists ? fileInfo.Length : 0;
+        }
+
+        /// <summary>
+        /// Determines whether a resumed download must restart from scratch because the server ignored the
+        /// Range request (i.e. it did not reply with 206 Partial Content)
+        /// </summary>
+        /// <param name="responseStatusCode">Status code of the server's response</param>
+        /// <param name="requestedStartPosition">Byte offset that was requested via the Range header</param>
+        /// <returns>True if the partial file must be discarded and the download restarted from byte 0</returns>
+        public static bool ShouldRestartFromScratch(System.Net.HttpStatusCode responseStatusCode, long requestedStartPosition)
+        {
+            return requestedStartPosition > 0 && responseStatusCode != System.Net.HttpStatusCode.PartialContent;
+        }
+
+        /// <summary>
+        /// Downloads a file from a URL with optional resume support and progress reporting
+        /// </summary>
+        /// <param name="url">URL to download from</param>
+        /// <param name="destinationPath">Local path to save the file</param>
+        /// <param name="resume">Whether to resume from an existing partial file</param>
+        /// <param name="cmdlet">Cmdlet for logging</param>
+        /// <param name="progressCallback">Progress callback for reporting download progress</param>
+        /// <returns>True if download succeeded</returns>
+        public static bool DownloadFileWithResume(string url, string destinationPath, bool resume, PSCmdlet? cmdlet = null, Action<int, string>? progressCallback = null)
+        {
+            try
+            {
+                var destinationDir = Path.GetDirectoryName(destinationPath);
+                if (!string.IsNullOrEmpty(destinationDir) && !Directory.Exists(destinationDir))
+                {
+                    Directory.CreateDirectory(destinationDir);
+                }
+
+                var startPosition = ComputeResumeStartPosition(destinationPath, resume);
+                if (startPosition > 0)
+                {
+                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Resuming download from position: {startPosition:N0} bytes");
+                }
+
+                var handler = new HttpClientHandler()
+                {
+                    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true,
+                    UseDefaultCredentials = true
+                };
+
+                using var httpClient = new HttpClient(handler);
+                var request = new HttpRequestMessage(HttpMethod.Get, url);
+                if (startPosition > 0)
+                {
+                    request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startPosition, null);
+                }
+
+                using var response = httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).Result;
+
+                if (ShouldRestartFromScratch(response.StatusCode, startPosition))
+                {
+                    LoggingService.WriteWarning(cmdlet, ServiceName, "Server doesn't support resume, starting fresh download");
+                    startPosition = 0;
+                    File.Delete(destinationPath);
+                }
+                else
+                {
+                    response.EnsureSuccessStatusCode();
+                }
+
+                var totalBytes = (response.Content.Headers.ContentLength ?? 0) + startPosition;
+
+                using var contentStream = response.Content.ReadAsStreamAsync().Result;
+                using var fileStream = new FileStream(destinationPath,
+                    startPosition > 0 ? FileMode.Append : FileMode.Create,
+                    FileAccess.Write, FileShare.None, 8192, false);
+
+                var buffer = new byte[8192];
+                long totalBytesRead = startPosition;
+                int bytesRead;
+                var lastProgressReport = 0;
+
+                while ((bytesRead = contentStream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    fileStream.Write(buffer, 0, bytesRead);
+                    totalBytesRead += bytesRead;
+
+                    if (totalBytes > 0)
+                    {
+                        var progressPercentage = (int)((totalBytesRead * 100) / totalBytes);
+                        if (progressPercentage > lastProgressReport)
+                        {
+                            lastProgressReport = progressPercentage;
+                            progressCallback?.Invoke(progressPercentage, $"Downloaded {totalBytesRead:N0} of {totalBytes:N0} bytes ({progressPercentage}%)");
+                        }
+                    }
+                    else
+                    {
+                        progressCallback?.Invoke(-1, $"Downloaded {totalBytesRead:N0} bytes");
+                    }
+                }
+
+                LoggingService.WriteVerbose(cmdlet, ServiceName, $"Download completed: {totalBytesRead:N0} bytes");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LoggingService.WriteError(cmdlet, ServiceName, $"Download failed: {ex.Message}", ex);
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Copies a file from UNC path with progress reporting
         /// </summary>
         /// <param name="sourcePath">UNC source path</param>
