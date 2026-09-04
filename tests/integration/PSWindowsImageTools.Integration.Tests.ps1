@@ -351,7 +351,8 @@ Describe "Integration: image drivers" -Tag Integration {
             $before = $mounted | Get-WindowsImageDriver
             if ($before.Count -gt 0) {
                 $target = $before | Select-Object -First 1
-                $target | Remove-WindowsImageDriver -Confirm:$false
+                $result = $target | Remove-WindowsImageDriver -Confirm:$false
+                $result.Success | Should -Be $true
                 $after = $mounted | Get-WindowsImageDriver
                 $after.PublishedName | Should -Not -Contain $target.PublishedName
             }

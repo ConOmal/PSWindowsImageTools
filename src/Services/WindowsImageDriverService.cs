@@ -61,7 +61,7 @@ namespace PSWindowsImageTools.Services
             }
 
             var duplicateGroups = current
-                .GroupBy(d => (d.OriginalFileName.ToLowerInvariant(), d.ProviderName.ToLowerInvariant()))
+                .GroupBy(d => ((d.OriginalFileName ?? string.Empty).ToLowerInvariant(), (d.ProviderName ?? string.Empty).ToLowerInvariant()))
                 .Where(g => g.Select(d => d.PublishedName).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
 
             foreach (var group in duplicateGroups)
@@ -92,6 +92,7 @@ namespace PSWindowsImageTools.Services
                 ProviderName = d.ProviderName ?? string.Empty,
                 ClassName = d.ClassName ?? string.Empty,
                 ClassDescription = d.ClassDescription ?? string.Empty,
+                ClassGuid = d.ClassGuid ?? string.Empty,
                 Date = d.Date,
                 Version = d.Version?.ToString() ?? string.Empty,
                 BootCritical = d.BootCritical,

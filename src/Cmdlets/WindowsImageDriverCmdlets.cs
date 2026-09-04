@@ -60,7 +60,7 @@ namespace PSWindowsImageTools.Cmdlets
     /// Removes a driver package from a mounted Windows image
     /// </summary>
     [Cmdlet(VerbsCommon.Remove, "WindowsImageDriver", SupportsShouldProcess = true)]
-    [OutputType(typeof(void))]
+    [OutputType(typeof(DriverRemovalResult[]))]
     public class RemoveWindowsImageDriverCmdlet : PSCmdlet
     {
         private const string ComponentName = "Remove-WindowsImageDriver";
@@ -87,6 +87,7 @@ namespace PSWindowsImageTools.Cmdlets
             }
 
             using var imageService = WindowsImageService.ForCmdlet(this);
+            var results = new List<DriverRemovalResult>();
 
             foreach (var driver in _allDrivers)
             {
@@ -105,16 +106,33 @@ namespace PSWindowsImageTools.Cmdlets
                 {
                     imageService.RemoveDriver(driver.MountPath, driver.PublishedName);
                     LoggingService.WriteVerbose(this, $"Removed driver {driver.PublishedName} from {driver.MountPath}");
+                    results.Add(new DriverRemovalResult
+                    {
+                        PublishedName = driver.PublishedName,
+                        OriginalFileName = driver.OriginalFileName,
+                        MountPath = driver.MountPath,
+                        Success = true
+                    });
                 }
                 catch (Exception ex)
                 {
                     LoggingService.WriteError(this, ComponentName, $"Failed to remove driver {driver.PublishedName}: {ex.Message}", ex);
+                    results.Add(new DriverRemovalResult
+                    {
+                        PublishedName = driver.PublishedName,
+                        OriginalFileName = driver.OriginalFileName,
+                        MountPath = driver.MountPath,
+                        Success = false,
+                        ErrorMessage = ex.Message
+                    });
                     if (!ContinueOnError.IsPresent)
                     {
                         throw;
                     }
                 }
             }
+
+            WriteObject(results.ToArray());
         }
     }
 

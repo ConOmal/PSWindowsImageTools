@@ -60,6 +60,40 @@ namespace PSWindowsImageTools.Tests
             Assert.Equal(new[] { "Package-B" }, report.SupersededPackageNames);
         }
 
+        [Fact]
+        public void ClassifyPackages_EmptyList_NoCountsIncremented()
+        {
+            var report = new ComponentStoreReport();
+            ComponentStoreService.ClassifyPackages(new List<(string Name, DismPackageFeatureState State)>(), report);
+
+            Assert.Equal(0, report.TotalPackages);
+            Assert.Equal(0, report.InstalledPackages);
+            Assert.Equal(0, report.SupersededPackages);
+            Assert.Equal(0, report.PendingPackages);
+            Assert.Empty(report.SupersededPackageNames);
+        }
+
+        [Fact]
+        public void ClassifyPackages_AccumulatesOntoPrePopulatedReport()
+        {
+            var report = new ComponentStoreReport
+            {
+                TotalPackages = 2,
+                InstalledPackages = 2
+            };
+            var packages = new List<(string Name, DismPackageFeatureState State)>
+            {
+                ("Package-X", DismPackageFeatureState.Superseded)
+            };
+
+            ComponentStoreService.ClassifyPackages(packages, report);
+
+            Assert.Equal(3, report.TotalPackages);
+            Assert.Equal(2, report.InstalledPackages);
+            Assert.Equal(1, report.SupersededPackages);
+            Assert.Equal(new[] { "Package-X" }, report.SupersededPackageNames);
+        }
+
         [Theory]
         [InlineData(false, "/Image:\"C:\\Mount\" /Cleanup-Image /StartComponentCleanup")]
         [InlineData(true, "/Image:\"C:\\Mount\" /Cleanup-Image /StartComponentCleanup /ResetBase")]

@@ -171,5 +171,30 @@ namespace PSWindowsImageTools.Tests
                 if (Directory.Exists(destination)) Directory.Delete(destination, true);
             }
         }
+
+        [Fact]
+        public void Export_MissingSourceDirectory_ThrowsDirectoryNotFoundException()
+        {
+            var mountPath = Path.Combine(Path.GetTempPath(), "PSWIT-Tests-" + Guid.NewGuid().ToString("N"));
+            var destination = Path.Combine(Path.GetTempPath(), "PSWIT-Tests-Dest-" + Guid.NewGuid().ToString("N"));
+
+            try
+            {
+                var driver = new WindowsImageDriverInfo
+                {
+                    PublishedName = "oem2.inf",
+                    MountPath = mountPath,
+                    CatalogFile = Path.Combine(mountPath, "Windows", "System32", "DriverStore", "FileRepository", "missing_driver", "missing.cat")
+                };
+
+                Assert.Throws<DirectoryNotFoundException>(() =>
+                    new WindowsImageDriverService().Export(driver, new DirectoryInfo(destination)));
+            }
+            finally
+            {
+                if (Directory.Exists(mountPath)) Directory.Delete(mountPath, true);
+                if (Directory.Exists(destination)) Directory.Delete(destination, true);
+            }
+        }
     }
 }

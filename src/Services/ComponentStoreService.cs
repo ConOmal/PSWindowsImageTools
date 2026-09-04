@@ -13,7 +13,6 @@ namespace PSWindowsImageTools.Services
     /// </summary>
     public class ComponentStoreService
     {
-        private const string ServiceName = "ComponentStoreService";
         private readonly ModuleCallbacks _callbacks;
 
         public ComponentStoreService(ModuleCallbacks? callbacks = null)
@@ -30,6 +29,11 @@ namespace PSWindowsImageTools.Services
             {
                 report.TotalPackages++;
 
+                // NotPresent, Staged, Resolved, Removed, and PartiallyInstalled are intentionally
+                // untracked beyond the TotalPackages count above — the Phase 1 spec only calls for
+                // Installed/Superseded/Pending counters, so packages in those five states fall
+                // through without incrementing any additional bucket. This is by design, not an
+                // oversight.
                 switch (state)
                 {
                     case DismPackageFeatureState.Installed:
@@ -95,7 +99,15 @@ namespace PSWindowsImageTools.Services
                 _callbacks.Warning?.Invoke($"Failed to enumerate packages for {mountedImage.ImageName}: {ex.Message}");
             }
 
-            report.WinSxSSizeMB = GetDirectorySizeMB(Path.Combine(mountPath, "Windows", "WinSxS"));
+            try
+            {
+                report.WinSxSSizeMB = GetDirectorySizeMB(Path.Combine(mountPath, "Windows", "WinSxS"));
+            }
+            catch (Exception ex)
+            {
+                report.Issues.Add($"Failed to measure WinSxS size: {ex.Message}");
+                _callbacks.Warning?.Invoke($"Failed to measure WinSxS size for {mountedImage.ImageName}: {ex.Message}");
+            }
 
             _callbacks.Verbose?.Invoke($"Component store analysis complete for {mountedImage.ImageName}: {report}");
             return report;

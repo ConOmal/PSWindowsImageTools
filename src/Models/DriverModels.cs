@@ -15,6 +15,7 @@ namespace PSWindowsImageTools.Models
         public string ProviderName { get; set; } = string.Empty;
         public string ClassName { get; set; } = string.Empty;
         public string ClassDescription { get; set; } = string.Empty;
+        public string ClassGuid { get; set; } = string.Empty;
         public DateTime Date { get; set; }
         public string Version { get; set; } = string.Empty;
         public bool BootCritical { get; set; }
@@ -25,6 +26,21 @@ namespace PSWindowsImageTools.Models
         public string? CatalogFile { get; set; }
 
         public override string ToString() => $"{PublishedName} ({OriginalFileName}) v{Version} by {ProviderName}";
+    }
+
+    /// <summary>
+    /// Result of attempting to remove one driver from a mounted Windows image
+    /// </summary>
+    public class DriverRemovalResult
+    {
+        public string PublishedName { get; set; } = string.Empty;
+        public string OriginalFileName { get; set; } = string.Empty;
+        public string MountPath { get; set; } = string.Empty;
+        public bool Success { get; set; }
+        public string? ErrorMessage { get; set; }
+
+        public override string ToString() =>
+            Success ? $"{PublishedName}: removed" : $"{PublishedName}: failed ({ErrorMessage})";
     }
 
     /// <summary>
