@@ -516,7 +516,28 @@ namespace PSWindowsImageTools.Services
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"Failed to remove provisioned AppX package {packageName}: {ex.Message}", ex);
+                    throw new InvalidOperationException($"Failed to remove provisioned AppX package {packageName}: {ex.Message}", ex);
+            }
+        }
+
+        /// <inheritdoc />
+        public void AddProvisionedAppxPackage(string mountPath, string appPath, List<string> dependencyPackages, string? licensePath = null, string? customDataPath = null)
+        {
+            Initialize();
+
+            try
+            {
+                _callbacks.Verbose?.Invoke($"Provisioning AppX package {appPath} into mounted image at {mountPath}");
+
+                using var session = DismApi.OpenOfflineSession(mountPath);
+                DismApi.AddProvisionedAppxPackage(session, appPath, dependencyPackages, licensePath ?? string.Empty, customDataPath ?? string.Empty);
+
+                _callbacks.Verbose?.Invoke($"AppX package {appPath} provisioned successfully");
+            }
+            catch (Exception ex)
+            {
+                _callbacks.Error?.Invoke(ex, $"Failed to provision AppX package {appPath}: {ex.Message}");
+                throw;
             }
         }
 

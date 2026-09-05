@@ -43,7 +43,7 @@
 
 This task's mapping method is DISM-facing (wraps `GetProvisionedAppxPackages`) — no unit test, matching established convention for this class of method throughout the codebase.
 
-- [ ] **Step 1: Create the model**
+- [x] **Step 1: Create the model**
 
 ```csharp
 using System.Collections.Generic;
@@ -66,7 +66,7 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 2: Create the service**
+- [x] **Step 2: Create the service**
 
 ```csharp
 using System.Collections.Generic;
@@ -116,7 +116,7 @@ namespace PSWindowsImageTools.Services
 
 Note for the implementer: `DismAppxPackage` may expose additional fields beyond `.PackageName`/`.DisplayName` (e.g. a publisher or install-path property) — check the actual type via the same reflection approach used in prior Phase 1/2 plans (`Add-Type -Path 'Module/PSWindowsImageTools/bin/Microsoft.Dism.dll'; [Microsoft.Dism.DismAppxPackage].GetProperties() | Select-Object Name`) before finalizing this mapping, and populate `Publisher`/`Version`/`InstallLocation` from real properties if they exist rather than leaving them permanently empty. If no such properties exist on the type, leave them as `string.Empty` and note this in your self-review — don't invent property names that don't exist.
 
-- [ ] **Step 3: Create the cmdlet**
+- [x] **Step 3: Create the cmdlet**
 
 ```csharp
 using System;
@@ -221,7 +221,7 @@ git commit -m "build: rebuild PSWindowsImageTools.dll for Get-WindowsImageProvis
 
 No unit test for this task — real DISM API call, matching every other DISM-facing method's established no-unit-test convention.
 
-- [ ] **Step 1: Add the interface member**
+- [x] **Step 1: Add the interface member**
 
 Add to `src/Services/Abstractions/IWindowsImageService.cs`, after `RemoveProvisionedAppxPackage`:
 
@@ -237,7 +237,7 @@ Add to `src/Services/Abstractions/IWindowsImageService.cs`, after `RemoveProvisi
         void AddProvisionedAppxPackage(string mountPath, string appPath, System.Collections.Generic.List<string> dependencyPackages, string? licensePath = null, string? customDataPath = null);
 ```
 
-- [ ] **Step 2: Implement in WindowsImageService**
+- [x] **Step 2: Implement in WindowsImageService**
 
 Add to `src/Services/WindowsImageService.cs`, near `RemoveProvisionedAppxPackage`, mirroring the exact session-lifecycle pattern every other DISM-facing method in this file uses:
 
@@ -264,7 +264,7 @@ Add to `src/Services/WindowsImageService.cs`, near `RemoveProvisionedAppxPackage
         }
 ```
 
-- [ ] **Step 3: Add the mapping method to AppProvisioningService**
+- [x] **Step 3: Add the mapping method to AppProvisioningService**
 
 Add to `src/Services/AppProvisioningService.cs`:
 
@@ -291,7 +291,7 @@ Add to `src/Services/AppProvisioningService.cs`:
 
 Add `using System;` and `using System.IO;` to the top of `AppProvisioningService.cs` if not already present.
 
-- [ ] **Step 4: Add the cmdlet**
+- [x] **Step 4: Add the cmdlet**
 
 Add to `src/Cmdlets/AppProvisioningCmdlets.cs`:
 
@@ -417,7 +417,7 @@ Rebuild and commit the DLL as a follow-up commit, same pattern as Task 1.
 **Interfaces:**
 - Produces: `WinGetConfigurationEntry { PackageIdentifier: string, Version: string?, Source: string }`. `WinGetConfigurationExportResult { ConfigPath: FileInfo, ScheduledTaskPath: FileInfo, Packages: List<WinGetConfigurationEntry> }`. `AppProvisioningService.ExportWinGetConfiguration(List<WinGetConfigurationEntry> packages, DirectoryInfo destination) -> WinGetConfigurationExportResult` — pure file templating, no DISM/image access.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```csharp
 using System.Collections.Generic;
@@ -495,12 +495,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter AppProvisioningServiceTests`
 Expected: FAIL (`WinGetConfigurationEntry`/`ExportWinGetConfiguration` don't exist yet)
 
-- [ ] **Step 3: Add the models**
+- [x] **Step 3: Add the models**
 
 Add to `src/Models/AppProvisioningModels.cs`:
 
@@ -530,7 +530,7 @@ Add to `src/Models/AppProvisioningModels.cs`:
     }
 ```
 
-- [ ] **Step 4: Implement ExportWinGetConfiguration**
+- [x] **Step 4: Implement ExportWinGetConfiguration**
 
 Add to `src/Services/AppProvisioningService.cs`:
 
@@ -605,12 +605,12 @@ Add to `src/Services/AppProvisioningService.cs`:
 
 Add `using System.IO;` and `using System.Text;` to the top of `AppProvisioningService.cs` if not already present.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter AppProvisioningServiceTests`
 Expected: PASS (all 3 tests)
 
-- [ ] **Step 6: Add the cmdlet**
+- [x] **Step 6: Add the cmdlet**
 
 Add to `src/Cmdlets/AppProvisioningCmdlets.cs`:
 

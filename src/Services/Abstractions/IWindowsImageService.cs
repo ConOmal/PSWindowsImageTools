@@ -155,6 +155,16 @@ namespace PSWindowsImageTools.Services
         void RemoveProvisionedAppxPackage(string mountPath, string packageName);
 
         /// <summary>
+        /// Provisions an AppX package into a mounted image
+        /// </summary>
+        /// <param name="mountPath">Path where the image is mounted</param>
+        /// <param name="appPath">Path to the .appx/.appxbundle/.msix package file</param>
+        /// <param name="dependencyPackages">Paths to any dependency packages the app requires</param>
+        /// <param name="licensePath">Path to the app's license file, if required</param>
+        /// <param name="customDataPath">Path to a custom data file for the app, if any</param>
+        void AddProvisionedAppxPackage(string mountPath, string appPath, System.Collections.Generic.List<string> dependencyPackages, string? licensePath = null, string? customDataPath = null);
+
+        /// <summary>
         /// Adds all drivers from a directory (optionally recursive) to a mounted image
         /// </summary>
         /// <param name="mountPath">Path where the image is mounted</param>
