@@ -549,8 +549,9 @@ Describe "Integration: image checkpoint" -Tag Integration {
 
 It "checkpoints, modifies, and restores a mounted image" {
         # Take the first mount result explicitly: the checkpoint/restore cmdlets take a
-        # single MountedWindowsImage, and the mount pipeline must bind as a scalar here.
-        $mounted = @(Get-WindowsImageList -ImagePath $BaselineWim |
+        # single MountedWindowsImage. Index the pipeline result directly (no @() wrapper —
+        # that would re-wrap the emitted collection instead of unwrapping it).
+        $mounted = (Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite)[0]
 
         try {
@@ -563,8 +564,7 @@ It "checkpoints, modifies, and restores a mounted image" {
             Write-Host "DIAG same assembly: $($mounted.GetType().Assembly -eq $expectedType.Assembly)"
             Write-Host "DIAG same type    : $($mounted.GetType() -eq $expectedType)"
 
-            $markerPath = Join-Path $mounted.MountPath.FullName "marker.txt"
-            $checkpoint = $mounted | Checkpoint-WindowsImage -Label "baseline"
+            $markerPath = Join-Path $mounted.MountPath.FullName "marker.txt"            $checkpoint = $mounted | Checkpoint-WindowsImage -Label "baseline"
             $checkpoint | Should -Not -BeNullOrEmpty
 
             Set-Content -Path $markerPath -Value "modified-after-checkpoint"

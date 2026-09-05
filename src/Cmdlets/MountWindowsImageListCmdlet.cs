@@ -203,8 +203,11 @@ namespace PSWindowsImageTools.Cmdlets
 
                 LoggingService.WriteVerbose(this, $"Mount operation complete: {successCount} successful, {failCount} failed");
 
-                // Output results
-                WriteObject(mountedImages.ToArray());
+                // Output results — enumerate explicitly so each MountedWindowsImage flows
+                // through the pipeline individually (the single-argument WriteObject overload
+                // emits the array as ONE item, which breaks single-object parameter binding
+                // downstream)
+                WriteObject(mountedImages.ToArray(), true);
 
                 var duration = DateTime.UtcNow - startTime;
                 LoggingService.LogOperationComplete(this, "MountImageList", duration, $"Mounted {successCount} of {_allImageInfo.Count} images");
