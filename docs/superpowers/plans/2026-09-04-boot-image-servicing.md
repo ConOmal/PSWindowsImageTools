@@ -41,7 +41,7 @@
 - Produces: `BootImageInfo { Path: FileInfo, SourceMediaRoot: string?, ImageCount: int, Images: List<WindowsImageInfo> }`
 - Produces: `BootImageService.Locate(DirectoryInfo mediaRoot, IWindowsImageService? imageService = null) -> BootImageInfo?`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```csharp
 using System;
@@ -95,12 +95,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter BootImageServiceTests`
 Expected: FAIL (build error — types don't exist yet)
 
-- [ ] **Step 3: Create the model**
+- [x] **Step 3: Create the model**
 
 ```csharp
 using System.Collections.Generic;
@@ -124,7 +124,7 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 4: Create the service**
+- [x] **Step 4: Create the service**
 
 ```csharp
 using System.IO;
@@ -186,12 +186,12 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter BootImageServiceTests`
 Expected: PASS (both tests)
 
-- [ ] **Step 6: Create the cmdlet**
+- [x] **Step 6: Create the cmdlet**
 
 ```csharp
 using System;
@@ -279,7 +279,7 @@ git commit -m "build: rebuild PSWindowsImageTools.dll for Get-WindowsBootImage"
 
 Both are thin pass-throughs with no independent unit test — same DISM-facing constraint as every other Phase 1/2 wrapper method in this codebase.
 
-- [ ] **Step 1: Implement AddDriver and Optimize**
+- [x] **Step 1: Implement AddDriver and Optimize**
 
 Add to `src/Services/BootImageService.cs` (inside the `BootImageService` class, after `Locate`):
 
@@ -311,11 +311,11 @@ Add to `src/Services/BootImageService.cs` (inside the `BootImageService` class, 
 
 Add `using System.Management.Automation;` to the top of `BootImageService.cs` if not already present.
 
-- [ ] **Step 2: Build to verify it compiles**
+- [x] **Step 2: Build to verify it compiles**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success, 0 warnings. If `ComponentStoreCleanupResult`'s actual namespace differs from `Models.ComponentStoreCleanupResult` as written above (e.g. it's already in scope via a `using PSWindowsImageTools.Models;` at the top of the file), simplify to just `ComponentStoreCleanupResult` — check the file's current usings first.
 
-- [ ] **Step 3: Add the cmdlets**
+- [x] **Step 3: Add the cmdlets**
 
 Add to `src/Cmdlets/BootImageCmdlets.cs`:
 
