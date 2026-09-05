@@ -3,7 +3,7 @@
     RootModule = 'bin\PSWindowsImageTools.dll'
 
     # Version number of this module.
-    ModuleVersion = '2026.09.04.1'
+    ModuleVersion = '2026.09.04.2'
 
     # Supported PSEditions
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -223,30 +223,30 @@
 
             # ReleaseNotes of this module
             ReleaseNotes = @'
-Modernized architecture and major feature expansion:
+Backlog completion release — 26 new cmdlets (62 -> 88), 695 unit tests:
 
-NEW CMDLETS (18):
-• Recipe-driven builds: New/Test/Invoke-WindowsImageRecipe (declarative JSON image builds)
-• Package/feature management: Get-WindowsImagePackageList, Get-WindowsImageFeatureList,
-  Add-WindowsImagePackage, Enable/Disable-WindowsImageFeature, Add/Remove-WindowsImageCapability
-• Export-WindowsImage (native WIM API: compression, boot flag, rename, index-by-name)
-• New-WindowsImageISO (bootable ISOs via oscdimg)
-• Get-MountedWindowsImage (cross-session mount registry)
-• Update-WindowsImageOnline (one-liner: latest KB discovery, download, install)
-• Image diffing: Get-WindowsImageSnapshot + Compare-WindowsImage (before/after audits)
+NEW SUBSYSTEMS (26 cmdlets):
+• Servicing intelligence: Get-WindowsImageServicingChain / Test-WindowsImageServicing
+  (SSU/LCU classification and staleness), Get-WindowsDynamicUpdate (catalog discovery
+  for SU/SafeOS/CU/Setup DU), Get/Set-WindowsImageReservedStorage
+• Registry configuration: Get/Set-WindowsImageService (start modes), Get/Set-WindowsImageOOBE,
+  Get-WindowsImageScheduledTask, Get/Set-WindowsImageSecurityBaseline (22-entry curated baseline)
+• Image lifecycle: Set-WindowsImageEdition, Get-WindowsImageWinRE (WIM-header intelligence),
+  Get-WindowsBootImage / Add-WindowsBootDriver / Optimize-WindowsBootImage,
+  Checkpoint-WindowsImage / Get-WindowsImageCheckpoint / Restore-WindowsImageCheckpoint
+• Apps and audit: Get/Add-WindowsImageProvisionedApp, Export-WindowsImageWinGetConfiguration
+  (DSC v0.2 YAML + first-boot task), Export-WindowsImageComplianceManifest,
+  Get-WindowsCapabilityRepository (FoD source indexer), Test-UnattendXMLConfiguration (21 rules)
 
 IMPROVEMENTS:
-• Unified DISM service: single API lifecycle, native progress callbacks, real error HRESULTs
-• Consolidated registry services: in-memory hive reads (no mounting, no file handles)
-• ISO input support in Get-WindowsImageList
-• Full DISM write API implemented (packages, features, capabilities, AppX, drivers)
-• Full Get-Help coverage for every cmdlet (PlatyPS-generated)
-• 99 unit tests with CI; complete documentation rewrite
+• Export-WindowsImage -SplitSize (split .swm parts); Mount-WindowsImageList -MaxParallel
+• Registry/catalog services de-coupled from PSCmdlet (ModuleCallbacks cores, testable)
+• Registry drift detection in Get-WindowsImageSnapshot / Compare-WindowsImage
+• ModifyOfflineRegistry implemented via the proven hive-mounted write path
 
-FIXES:
-• Get-RegistryHiveOnDemand is now actually exported (was silently missing)
-• Mount/unmount failures carry real DISM error messages
-• Removed all GC-based handle workarounds
+QUALITY:
+• 695 unit tests (was 176); help guardrail: 88 cmdlets, MAML in sync
+• Every new subsystem follows the spec -> plan -> implementation cycle (docs/superpowers/)
 '@
         }
     }
