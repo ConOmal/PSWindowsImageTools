@@ -554,6 +554,15 @@ It "checkpoints, modifies, and restores a mounted image" {
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite)[0]
 
         try {
+            # TEMPORARY DIAGNOSTIC: identify the loaded MountedWindowsImage type vs the
+            # parameter's expected type (CI-only binding failure investigation)
+            $expectedType = [PSWindowsImageTools.Models.MountedWindowsImage]
+            Write-Host "DIAG mounted type : $($mounted.GetType().AssemblyQualifiedName)"
+            Write-Host "DIAG mounted asm  : $($mounted.GetType().Assembly.Location)"
+            Write-Host "DIAG expected asm : $($expectedType.Assembly.Location)"
+            Write-Host "DIAG same assembly: $($mounted.GetType().Assembly -eq $expectedType.Assembly)"
+            Write-Host "DIAG same type    : $($mounted.GetType() -eq $expectedType)"
+
             $markerPath = Join-Path $mounted.MountPath.FullName "marker.txt"
             $checkpoint = $mounted | Checkpoint-WindowsImage -Label "baseline"
             $checkpoint | Should -Not -BeNullOrEmpty
