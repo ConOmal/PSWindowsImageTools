@@ -28,10 +28,10 @@ BeforeAll {
         if ($LASTEXITCODE -ne 0) { throw "DISM capture failed for $ImageFile (exit $LASTEXITCODE)" }
     }
 
-    # Optional real-image mode: point PSWIT_IT_WIM at a captured WIM that has a
-    # real CBS servicing stack + driver store to exercise the full servicing
-    # surface (CI captures the runner's own OS for this). The synthetic image is
-    # the default because it builds in seconds everywhere.
+    # Optional real-image mode: point PSWIT_IT_WIM at a WIM that has a real CBS
+    # servicing stack + driver store to exercise the full servicing surface
+    # (CI exports one from a clean Windows 11 24H2 install.wim for this). The
+    # synthetic image is the default because it builds in seconds everywhere.
     $script:RealWim = $env:PSWIT_IT_WIM
     if ($script:RealWim -and (Test-Path $script:RealWim)) {
         Write-Host "Real-image mode: $script:RealWim"

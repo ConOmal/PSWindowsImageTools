@@ -124,11 +124,15 @@ jobs:
           if-no-files-found: warn
 
   integration-real:
-    # Full servicing surface: captures the runner's own OS (real CBS + driver
-    # store) as the baseline WIM, named to match the suite's expectations, and
-    # runs every integration test against it. Manual dispatch only.
+    # Full servicing surface: downloads a clean Windows 11 24H2 install.wim
+    # (real CBS + driver store) as the baseline, exports the Pro edition named
+    # to match the suite's expectations, and runs every integration test
+    # against it. Manual dispatch only. The baseline is cached so repeat runs
+    # skip the download/export. (Capturing the runner's own OS was abandoned:
+    # the WIM alone was ~30-40 GB, exceeding both the runner's C: capacity and
+    # the 10 GB actions/cache limit.)
     runs-on: windows-latest
-    timeout-minutes: 150
+    timeout-minutes: 60
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.real_image == 'true'
 
     steps:
@@ -150,49 +154,38 @@ jobs:
         run: Copy-Item Artifacts/bin/PSWindowsImageTools.dll Module/PSWindowsImageTools/bin/PSWindowsImageTools.dll -Force
         shell: pwsh
 
-      - name: Resolve runner image version for the cache key
-        run: Add-Content $env:GITHUB_ENV "IMAGE_VERSION=$env:ImageVersion"
-        shell: pwsh
-
       - name: Restore cached baseline WIM
         id: wim-cache
         uses: actions/cache@v4
         with:
           path: C:\PSWIT-real.wim
-          key: pswit-baseline-wim-${{ env.IMAGE_VERSION }}
+          key: pswit-baseline-wim-24h2-202510
 
-      - name: Capture runner OS as the baseline WIM
+      - name: Download Windows 11 24H2 ISO
         if: steps.wim-cache.outputs.cache-hit != 'true'
         run: |
-          $exclusionLines = @(
-            '[ExclusionList]',
-            '\pagefile.sys',
-            '\swapfile.sys',
-            '\hiberfil.sys',
-            '\PSWIT-real.wim',
-            '\hostedtoolcache',
-            '\ProgramData\chocolatey',
-            '\ProgramData\Package Cache',
-            '\ProgramData\Microsoft\Windows\WER',
-            '\Windows\Logs',
-            '\Windows\Temp',
-            '\Windows\SoftwareDistribution',
-            '\Users\runneradmin\AppData\Local\Temp'
-          )
-          Set-Content -Path C:\PSWIT-exclusions.ini -Value $exclusionLines -Encoding ascii
-          $result = Invoke-CimMethod -ClassName Win32_ShadowCopy -MethodName Create -Arguments @{ Volume = 'C:\'; Context = 'ClientAccessible' }
-          if ($result.ReturnValue -ne 0) { throw "VSS snapshot creation failed (return $($result.ReturnValue))" }
-          $shadow = Get-CimInstance Win32_ShadowCopy | Where-Object ID -eq $result.ShadowID
-          $device = "$($shadow.DeviceObject)\"
-          "Shadow copy: $device"
-          dism /Capture-Image /ImageFile:C:\PSWIT-real.wim /CaptureDir:"$device" /Name:"Windows 11 Pro IT" /Compress:max /ConfigFile:C:\PSWIT-exclusions.ini
-          $captureExit = $LASTEXITCODE
-          $shadow | Remove-CimInstance
-          if ($captureExit -ne 0) {
+          curl.exe -L --fail --retry 3 -o C:\Win11_24H2.iso "https://archive.org/download/win11_24h2_english_x64_202510/Win11_24H2_English_x64.iso"
+          if ($LASTEXITCODE -ne 0) { throw "ISO download failed (exit $LASTEXITCODE)" }
+          "ISO: {0:N2} GB" -f ((Get-Item C:\Win11_24H2.iso).Length / 1GB)
+        shell: pwsh
+
+      - name: Extract and export baseline WIM
+        if: steps.wim-cache.outputs.cache-hit != 'true'
+        run: |
+          & "C:\Program Files\7-Zip\7z.exe" x C:\Win11_24H2.iso sources/install.wim -oC:\ -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7z extraction failed (exit $LASTEXITCODE)" }
+          Import-Module ./Module/PSWindowsImageTools/PSWindowsImageTools.psd1 -Force
+          $pro = Get-WindowsImageList -ImagePath C:\sources\install.wim | Where-Object { $_.Name -eq 'Windows 11 Pro' } | Select-Object -First 1
+          if (-not $pro) { throw "Windows 11 Pro index not found in install.wim" }
+          "Exporting index $($pro.Index) ($($pro.Name)) -> C:\PSWIT-real.wim"
+          dism /Export-Image /SourceImageFile:C:\sources\install.wim /SourceIndex:$($pro.Index) /DestinationImageFile:C:\PSWIT-real.wim /DestinationName:"Windows 11 Pro IT" /Compress:max
+          $exportExit = $LASTEXITCODE
+          Remove-Item C:\Win11_24H2.iso, C:\sources -Recurse -Force -ErrorAction SilentlyContinue
+          if ($exportExit -ne 0) {
             Copy-Item C:\Windows\Logs\DISM\dism.log ./dism-capture.log -ErrorAction SilentlyContinue
-            throw "DISM capture failed (exit $captureExit)"
+            throw "DISM export failed (exit $exportExit)"
           }
-          "Captured baseline: {0:N2} GB" -f ((Get-Item C:\PSWIT-real.wim).Length / 1GB)
+          "Baseline: {0:N2} GB" -f ((Get-Item C:\PSWIT-real.wim).Length / 1GB)
         shell: pwsh
 
       - name: Upload capture diagnostics

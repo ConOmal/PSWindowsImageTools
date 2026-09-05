@@ -188,3 +188,25 @@ Fix the PSWindowsImageTools integration test suite (Phase A3) so all 10 tests pa
   for later: support a `-RealWim` parameter in run-integration.ps1 to point at a real install.wim
   (CI runners can't easily host one; a self-hosted runner or an artifact-cached small real WIM
   would work).
+
+- **Real-image CI baseline: runner-OS capture abandoned, clean install.wim adopted**:
+  1. Real-image mode shipped: `PSWIT_IT_WIM` env hook + `run-integration.ps1 -RealWim`; relaxed
+     assertions (SourcePath `-BeLike "*.wim"`, AppxPackages `-Not -BeNull`); new `integration-real`
+     job (dispatch input `real_image=true` only).
+  2. First capture attempt (run 33921938618) failed exit 32 (ERROR_SHARING_VIOLATION) on the live
+     volume -> switched to VSS shadow capture (Win32_ShadowCopy Create + DeviceObject path) +
+     dism.log upload on failure. YAML gotcha: a here-string terminator `'@` at column 0 ends a YAML
+     block scalar - rebuilt the exclusion list as an array (d58404e).
+  3. Second attempt (run 33928515760) reached 74% then failed **Error 112 (disk full)**: the WIM
+     was ~30 GB at 74% (write offset 0x78b5c0782) -> ~40 GB final. Root cause: the runner OS is
+     too big to capture on a GitHub-hosted runner - C: (~70 GB) can't hold WIM + VSS shadow
+     storage + OS, and even a successful capture (~25-40 GB) far exceeds the 10 GB actions/cache
+     limit, so caching would never work and every run would re-capture ~2 h. Runner-OS capture is
+     fundamentally not viable on GitHub-hosted runners.
+  4. **Pivot**: baseline is now a clean Windows 11 24H2 install.wim - download the unmodified
+     Microsoft ISO from archive.org (win11_24h2_english_x64_202510, 5.42 GB, SHA1
+     a81079ba4b9a9ce29a7a2a20cd34266ac21becce), extract install.wim with 7z (preinstalled on
+     runners), export the Windows 11 Pro index as C:\PSWIT-real.wim with /DestinationName
+     "Windows 11 Pro IT" (matches the suite's name assertion) /Compress:max (~4-5 GB), cache it
+     (fits the 10 GB limit). Deterministic baseline; repeat runs skip download+export entirely.
+     Job timeout 150 -> 60 min.
