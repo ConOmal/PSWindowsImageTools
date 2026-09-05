@@ -52,6 +52,37 @@ namespace PSWindowsImageTools.Cmdlets
 
         private readonly List<WindowsImageInfo> _allImageInfo = new List<WindowsImageInfo>();
 
+        // PowerShell cmdlet output methods (WriteVerbose/WriteWarning/WriteError/WriteProgress)
+        // are pipeline-thread-only. Parallel mounting runs on worker threads, so messages and
+        // progress produced there are buffered and drained on the pipeline thread afterwards.
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _bufferedVerbose =
+            new System.Collections.Concurrent.ConcurrentQueue<string>();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _bufferedWarnings =
+            new System.Collections.Concurrent.ConcurrentQueue<string>();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<(string Message, Exception Exception)> _bufferedErrors =
+            new System.Collections.Concurrent.ConcurrentQueue<(string Message, Exception Exception)>();
+        private readonly System.Collections.Concurrent.ConcurrentQueue<(int Percent, string Activity, string Status)> _bufferedProgress =
+            new System.Collections.Concurrent.ConcurrentQueue<(int Percent, string Activity, string Status)>();
+
+        private void BufferVerbose(string message) => _bufferedVerbose.Enqueue(message);
+
+        private void BufferWarning(string message) => _bufferedWarnings.Enqueue(message);
+
+        private void BufferError(string message, Exception exception) => _bufferedErrors.Enqueue((message, exception));
+
+        /// <summary>
+        /// Creates ModuleCallbacks that buffer output for later drain on the pipeline thread
+        /// </summary>
+        private ModuleCallbacks CreateBufferedCallbacks()
+        {
+            return new ModuleCallbacks
+            {
+                Verbose = BufferVerbose,
+                Warning = BufferWarning,
+                Error = (exception, message) => BufferError(message, exception)
+            };
+        }
+
         /// <summary>
         /// Processes pipeline input
         /// </summary>
@@ -119,11 +150,11 @@ namespace PSWindowsImageTools.Cmdlets
                     {
                         var mountedImage = MountSingleImage(imageInfo, mountRoot, wimGuid, currentIndex, _allImageInfo.Count);
                         lock (lockObj) { mountedImages.Add(mountedImage); }
-                        LoggingService.WriteVerbose(this, $"[{currentIndex} of {_allImageInfo.Count}] - Successfully mounted: {mountedImage.MountPath}");
+                        BufferVerbose($"[{currentIndex} of {_allImageInfo.Count}] - Successfully mounted: {mountedImage.MountPath}");
                     }
                     catch (Exception ex)
                     {
-                        LoggingService.WriteError(this, $"[{currentIndex} of {_allImageInfo.Count}] - Failed to mount image {imageInfo.Index}: {ex.Message}", ex);
+                        BufferError($"[{currentIndex} of {_allImageInfo.Count}] - Failed to mount image {imageInfo.Index}: {ex.Message}", ex);
                         var failedMount = new MountedWindowsImage
                         {
                             MountId = Guid.NewGuid().ToString(),
@@ -141,6 +172,28 @@ namespace PSWindowsImageTools.Cmdlets
                         lock (lockObj) { mountedImages.Add(failedMount); }
                     }
                 });
+
+                // Drain worker-thread buffers on the pipeline thread — cmdlet output methods
+                // cannot be called from outside the pipeline thread
+                while (_bufferedVerbose.TryDequeue(out var bufferedMessage))
+                {
+                    LoggingService.WriteVerbose(this, bufferedMessage);
+                }
+
+                while (_bufferedProgress.TryDequeue(out var bufferedProgress))
+                {
+                    LoggingService.WriteProgress(this, bufferedProgress.Activity, bufferedProgress.Status, bufferedProgress.Percent);
+                }
+
+                while (_bufferedWarnings.TryDequeue(out var bufferedWarning))
+                {
+                    LoggingService.WriteWarning(this, bufferedWarning);
+                }
+
+                while (_bufferedErrors.TryDequeue(out var bufferedError))
+                {
+                    LoggingService.WriteError(this, bufferedError.Message, bufferedError.Exception);
+                }
 
                 LoggingService.CompleteProgress(this, "Mounting Windows Images");
 
@@ -171,7 +224,7 @@ namespace PSWindowsImageTools.Cmdlets
             var mountId = Guid.NewGuid().ToString();
             var mountPath = ConfigurationService.CreateUniqueMountDirectory(mountRoot, imageInfo.Index, wimGuid);
             
-            LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Created mount directory: {mountPath}");
+            BufferVerbose($"[{currentIndex} of {totalCount}] - Created mount directory: {mountPath}");
 
             var mountedImage = new MountedWindowsImage
             {
@@ -190,21 +243,18 @@ namespace PSWindowsImageTools.Cmdlets
 
             try
             {
-                LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Mounting image {imageInfo.Index} to {mountPath} using native DISM API");
+                BufferVerbose($"[{currentIndex} of {totalCount}] - Mounting image {imageInfo.Index} to {mountPath} using native DISM API");
 
-                // Create native progress callback for real-time mount progress
-                var progressCallback = ProgressService.CreateMountProgressCallback(
-                    this,
-                    "Mounting Windows Images",
-                    imageInfo.Name,
-                    mountPath,
-                    currentIndex,
-                    totalCount);
+                // Real-time mount progress is buffered: DISM invokes the callback on the worker
+                // thread, and cmdlet output methods are pipeline-thread-only.
+                var progressCallback = new Action<int, string>((percent, status) =>
+                    _bufferedProgress.Enqueue((percent, "Mounting Windows Images",
+                        $"{imageInfo.Name} [{currentIndex} of {totalCount}]: {status}")));
 
                 var mountStartTime = DateTime.UtcNow;
 
-                // Use unified image service for mounting with real progress callbacks
-                using var imageService = WindowsImageService.ForCmdlet(this);
+                // Use unified image service for mounting with buffered callbacks (worker thread)
+                using var imageService = new WindowsImageService(CreateBufferedCallbacks());
                 // (MountImage throws on failure with the underlying DISM error)
                 imageService.MountImage(
                     imageInfo.SourcePath,
@@ -221,7 +271,7 @@ namespace PSWindowsImageTools.Cmdlets
                 // Register for re-discovery across sessions
                 MountSessionService.Register(mountedImage);
 
-                LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Image mounted successfully using native API: {imageInfo.Name} (Duration: {LoggingService.FormatDuration(mountDuration)})");
+                BufferVerbose($"[{currentIndex} of {totalCount}] - Image mounted successfully using native API: {imageInfo.Name} (Duration: {LoggingService.FormatDuration(mountDuration)})");
 
                 TryMountEmbeddedWinRE(mountedImage, currentIndex, totalCount);
 
@@ -243,7 +293,7 @@ namespace PSWindowsImageTools.Cmdlets
                 }
                 catch (Exception cleanupEx)
                 {
-                    LoggingService.WriteWarning(this, $"Failed to clean up mount directory {mountPath}: {cleanupEx.Message}");
+                    BufferWarning($"Failed to clean up mount directory {mountPath}: {cleanupEx.Message}");
                 }
 
                 throw;
@@ -272,11 +322,11 @@ namespace PSWindowsImageTools.Cmdlets
 
             try
             {
-                LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - Found embedded WinRE image, extracting and mounting");
+                BufferVerbose($"[{currentIndex} of {totalCount}] - Found embedded WinRE image, extracting and mounting");
 
                 WinREImageService.ExtractEmbeddedWinRE(mountedImage.MountPath.FullName, winREWimPath);
 
-                using var winREImageService = WindowsImageService.ForCmdlet(this);
+                using var winREImageService = new WindowsImageService(CreateBufferedCallbacks());
                 winREImageService.MountImage(
                     winREWimPath,
                     winREMountPath,
@@ -299,11 +349,11 @@ namespace PSWindowsImageTools.Cmdlets
                 MountSessionService.Register(winRE);
                 mountedImage.WinRE = winRE;
 
-                LoggingService.WriteVerbose(this, $"[{currentIndex} of {totalCount}] - WinRE image mounted at {winREMountPath}");
+                BufferVerbose($"[{currentIndex} of {totalCount}] - WinRE image mounted at {winREMountPath}");
             }
             catch (Exception ex)
             {
-                LoggingService.WriteWarning(this, $"[{currentIndex} of {totalCount}] - Failed to mount embedded WinRE image: {ex.Message}");
+                BufferWarning($"[{currentIndex} of {totalCount}] - Failed to mount embedded WinRE image: {ex.Message}");
                 mountedImage.WinRE = null;
             }
         }
