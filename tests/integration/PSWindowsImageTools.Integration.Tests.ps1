@@ -511,3 +511,60 @@ Describe "Integration: servicing chain" -Tag Integration {
         }
     }
 }
+
+Describe "Integration: boot image servicing" -Tag Integration {
+
+    It "adds drivers and optimizes a mounted boot image without error" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+        $emptyDriverDir = Join-Path $Workspace "empty-drivers"
+        New-Item -ItemType Directory -Force -Path $emptyDriverDir | Out-Null
+
+        try {
+            { $mounted | Add-WindowsBootDriver -DriverPath $emptyDriverDir -Confirm:$false } | Should -Not -Throw
+            $result = $mounted | Optimize-WindowsBootImage -Confirm:$false
+            $result | Should -Not -BeNullOrEmpty
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe "Integration: app provisioning" -Tag Integration {
+
+    It "lists provisioned apps for a mounted image without error" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            { $mounted | Get-WindowsImageProvisionedApp } | Should -Not -Throw
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe "Integration: image checkpoint" -Tag Integration {
+
+    It "checkpoints, modifies, and restores a mounted image" {
+        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+
+        try {
+            $markerPath = Join-Path $mounted.MountPath.FullName "marker.txt"
+            $checkpoint = $mounted | Checkpoint-WindowsImage -Label "baseline"
+            $checkpoint | Should -Not -BeNullOrEmpty
+
+            Set-Content -Path $markerPath -Value "modified-after-checkpoint"
+
+            $checkpoint | Restore-WindowsImageCheckpoint -MountedImage $mounted -Confirm:$false
+
+            Get-Content $markerPath -Raw | Should -Match "integration-test"
+        }
+        finally {
+            $mounted | Dismount-WindowsImageList -Discard -RemoveDirectories -ErrorAction SilentlyContinue
+        }
+    }
+}

@@ -125,6 +125,36 @@
         # WinRE Intelligence
         'Get-WindowsImageWinRE',
 
+        # OOBE Configuration
+        'Get-WindowsImageOOBE',
+        'Set-WindowsImageOOBE',
+
+        # Service Configuration
+        'Get-WindowsImageService',
+        'Set-WindowsImageService',
+
+        # Scheduled Tasks
+        'Get-WindowsImageScheduledTask',
+
+        # Security Baselines
+        'Get-WindowsImageSecurityBaseline',
+        'Set-WindowsImageSecurityBaseline',
+
+        # Boot Image Servicing
+        'Get-WindowsBootImage',
+        'Add-WindowsBootDriver',
+        'Optimize-WindowsBootImage',
+
+        # App Provisioning
+        'Get-WindowsImageProvisionedApp',
+        'Add-WindowsImageProvisionedApp',
+        'Export-WindowsImageWinGetConfiguration',
+
+        # Image Checkpoints
+        'Checkpoint-WindowsImage',
+        'Get-WindowsImageCheckpoint',
+        'Restore-WindowsImageCheckpoint',
+
         # Recipe-Driven Image Builds
         'New-WindowsImageRecipe',
         'Test-WindowsImageRecipe',

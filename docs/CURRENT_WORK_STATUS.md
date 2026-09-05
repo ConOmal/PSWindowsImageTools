@@ -27,6 +27,50 @@
 
 ## Completed
 
+### Phase 7 — Registry Config Batch + Continued Session Phases (2026-09-04)
+- **Services configuration** (spec `docs/superpowers/specs/2026-09-04-services-configuration-design.md`,
+  plan `docs/superpowers/plans/2026-09-04-services-configuration.md`): `Get-WindowsImageService` /
+  `Set-WindowsImageService` — service inventory and start-mode changes (Boot/System/Automatic/Manual/
+  Disabled, `-DelayedAutoStart`) from the offline SYSTEM hive (`ControlSet001\Services`); writes
+  delegate directly to `NativeRegistryService.ApplyRegistryOperations`; 51 tests.
+- **OOBE configuration** (spec `docs/superpowers/specs/2026-09-04-oobe-configuration-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-oobe-configuration.md`): `Get-WindowsImageOOBE` /
+  `Set-WindowsImageOOBE` — 7-entry OOBE catalog (SkipMachineOOBE, SkipUserOOBE, SkipPrivacyExperience,
+  BypassNRO, HideOnlineAccountScreens, HideWirelessSetupInOOBE, ProtectYourPC) with tri-state
+  switches (`-X` = 1, `-X:$false` = 0, omit = untouched) and catalog-validated `-Remove`; 33 tests.
+- **Scheduled Tasks** (spec `docs/superpowers/specs/2026-09-04-scheduled-tasks-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-scheduled-tasks.md`): `Get-WindowsImageScheduledTask` —
+  read-only TaskCache\Tree inventory (task path, GUID, state); the undocumented Tasks\<GUID> binary
+  blob is honestly out of scope; 39 tests.
+- **Security baselines** (spec `docs/superpowers/specs/2026-09-04-security-baselines-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-security-baselines.md`): `Get-WindowsImageSecurityBaseline` /
+  `Set-WindowsImageSecurityBaseline` — 22-entry curated baseline across SOFTWARE (UAC, logon UX,
+  AutoRun, RDP), SYSTEM (LSA/NTLM, SMB signing, SMB1 off, NLA, Remote Assistance) and the default-user
+  NTUSER.DAT (screen-saver lock), each with documented rationale; compliance compare is numeric; 28 tests.
+- **Continued interrupted-session phases** (specs/plans committed by the parallel session, implemented
+  here after it was rate-limited):
+  - *Boot Image Servicing*: `Get-WindowsBootImage`, `Add-WindowsBootDriver`,
+    `Optimize-WindowsBootImage` — thin wrappers over `WindowsInstallationMedia.FromRoot`,
+    `AddDriversFromDirectory`, `ComponentStoreService.Cleanup` (ResetBase intentionally never
+    offered for PE images); 2 tests.
+  - *App Provisioning*: `Get-WindowsImageProvisionedApp`, `Add-WindowsImageProvisionedApp`,
+    `Export-WindowsImageWinGetConfiguration` — completes the AppX provisioning set (new
+    `IWindowsImageService.AddProvisionedAppxPackage` wrapping the confirmed 5-arg
+    `DismApi.AddProvisionedAppxPackage`) plus a pure WinGet Configuration DSC v0.2 YAML +
+    first-boot Scheduled Task XML generator; 3 tests.
+  - *Image Checkpoint*: `Checkpoint-WindowsImage`, `Get-WindowsImageCheckpoint`,
+    `Restore-WindowsImageCheckpoint` (`-RemoveAfterRestore`) — directory-mirror snapshots with a
+    MountSessionService-style JSON index; restore guards mounted+read-write; 7 tests.
+- **Interrupted session's refactor validated**: `NativeRegistryService` gained ModuleCallbacks cores
+  (PSCmdlet overloads retained as thin wrappers), `RegistryApplicationService`/`RegistryService`/
+  `WindowsUpdateCatalogService` de-coupled from PSCmdlet, `Export-WindowsImage -SplitSize` (SWM
+  parts) and `Mount-WindowsImageList -MaxParallel` (parallel mounting) added; both new parameters
+  documented in help. Their 25 new tests (NativeRegistryServiceCallbacks, RegistryApplicationService,
+  WindowsUpdateCatalogService) pass.
+- All 16 new cmdlets exported in the psd1 (no wildcards), help md + regenerated MAML in sync
+  (84 commands), DLL rebuilt and synced to `Module/PSWindowsImageTools/bin/`.
+- Unit tests now **535/535** (was 347); build 0 warnings/0 errors; help guardrail green (4/4 checks).
+
 ### Phase 6 — Backlog Batch: Reserved Storage, Edition Servicing, WinRE Intelligence, Servicing Chain (2026-09-04)
 - **Reserved Storage** (spec `docs/superpowers/specs/2026-09-04-reserved-storage-design.md`, plan
   `docs/superpowers/plans/2026-09-04-reserved-storage.md`): `Get-WindowsImageReservedStorage` /
@@ -134,7 +178,7 @@
   added/removed/changed per category)
 
 ## Module Totals
-- 51 exported cmdlets · 99 unit tests passing · build clean (0 warnings)
+- 84 exported cmdlets · 535 unit tests passing · build clean (0 warnings)
 
 ## Known Remaining Tech Debt
 - Remaining PSCmdlet-coupled services (catalog, ADK, wallpaper, unattend, autopilot) accept
