@@ -35,7 +35,7 @@
 - Produces: `ImageCheckpointInfo { CheckpointId: string, MountId: string, Label: string?, CreatedAt: DateTime, SizeBytes: long, CheckpointPath: DirectoryInfo }`
 - Produces: `ImageCheckpointService.Create(MountedWindowsImage mountedImage, string? label) -> ImageCheckpointInfo` — real file I/O, unit-testable with a fake `MountedWindowsImage` pointing at a temp directory (no DISM/mount involved at all, matches the spec's stated testing approach).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```csharp
 using System;
@@ -107,12 +107,12 @@ namespace PSWindowsImageTools.Tests
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageCheckpointServiceTests`
 Expected: FAIL (build error — types don't exist yet)
 
-- [ ] **Step 3: Create the model**
+- [x] **Step 3: Create the model**
 
 ```csharp
 using System;
@@ -138,7 +138,7 @@ namespace PSWindowsImageTools.Models
 }
 ```
 
-- [ ] **Step 4: Create the service with Create() and JSON index persistence**
+- [x] **Step 4: Create the service with Create() and JSON index persistence**
 
 ```csharp
 using System;
@@ -301,12 +301,12 @@ namespace PSWindowsImageTools.Services
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageCheckpointServiceTests`
 Expected: PASS (both tests)
 
-- [ ] **Step 6: Create the cmdlet**
+- [x] **Step 6: Create the cmdlet**
 
 ```csharp
 using System;
@@ -386,7 +386,7 @@ git commit -m "build: rebuild PSWindowsImageTools.dll for Checkpoint-WindowsImag
 - Consumes: `ImageCheckpointInfo`, `ImageCheckpointService.Create` (Task 1).
 - Produces: `ImageCheckpointService.List(string? mountId) -> List<ImageCheckpointInfo>`. `ImageCheckpointService.Restore(ImageCheckpointInfo checkpoint, MountedWindowsImage mountedImage) -> void`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/PSWindowsImageTools.Tests/ImageCheckpointServiceTests.cs`:
 
@@ -455,12 +455,12 @@ Append to `tests/PSWindowsImageTools.Tests/ImageCheckpointServiceTests.cs`:
         }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageCheckpointServiceTests`
 Expected: FAIL (`List`/`Restore` not defined)
 
-- [ ] **Step 3: Implement List and Restore**
+- [x] **Step 3: Implement List and Restore**
 
 Add to `src/Services/ImageCheckpointService.cs` (inside the `ImageCheckpointService` class, after `Create`):
 
@@ -529,12 +529,12 @@ Add to `src/Services/ImageCheckpointService.cs` (inside the `ImageCheckpointServ
         }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageCheckpointServiceTests`
 Expected: PASS (all 6 tests: 2 from Task 1 + 4 new)
 
-- [ ] **Step 5: Add the cmdlets**
+- [x] **Step 5: Add the cmdlets**
 
 Add to `src/Cmdlets/ImageCheckpointCmdlets.cs`:
 
@@ -620,7 +620,7 @@ Add to `src/Cmdlets/ImageCheckpointCmdlets.cs`:
 
 Add `using System.Collections.Generic;` to the top of `ImageCheckpointCmdlets.cs` if not already present.
 
-- [ ] **Step 6: Build and register the cmdlets**
+- [x] **Step 6: Build and register the cmdlets**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success, 0 warnings.
 Add `'Get-WindowsImageCheckpoint'` and `'Restore-WindowsImageCheckpoint'` to `CmdletsToExport` in `Module/PSWindowsImageTools/PSWindowsImageTools.psd1`.
@@ -648,7 +648,7 @@ Rebuild and commit the DLL as a follow-up commit, same pattern as Task 1.
 - Consumes: `ImageCheckpointInfo`, `ImageCheckpointService.Restore` (Task 2).
 - Produces: `ImageCheckpointService.Delete(ImageCheckpointInfo checkpoint) -> void`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/PSWindowsImageTools.Tests/ImageCheckpointServiceTests.cs`:
 
@@ -669,12 +669,12 @@ Append to `tests/PSWindowsImageTools.Tests/ImageCheckpointServiceTests.cs`:
         }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageCheckpointServiceTests`
 Expected: FAIL (`Delete` not defined)
 
-- [ ] **Step 3: Implement Delete**
+- [x] **Step 3: Implement Delete**
 
 Add to `src/Services/ImageCheckpointService.cs` (inside the class, after `Restore`):
 
@@ -700,12 +700,12 @@ Add to `src/Services/ImageCheckpointService.cs` (inside the class, after `Restor
         }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/PSWindowsImageTools.Tests --filter ImageCheckpointServiceTests`
 Expected: PASS (all 7 tests)
 
-- [ ] **Step 5: Wire -RemoveAfterRestore into RestoreWindowsImageCheckpointCmdlet**
+- [x] **Step 5: Wire -RemoveAfterRestore into RestoreWindowsImageCheckpointCmdlet**
 
 Modify `RestoreWindowsImageCheckpointCmdlet` in `src/Cmdlets/ImageCheckpointCmdlets.cs`: add a new parameter and call `service.Delete(checkpoint)` after a successful restore.
 
@@ -723,7 +723,7 @@ In the `try` block inside `EndProcessing`'s `foreach`, after `service.Restore(ch
                     }
 ```
 
-- [ ] **Step 6: Build and verify**
+- [x] **Step 6: Build and verify**
 
 Run: `dotnet build PSWindowsImageTools.sln` — expect success, 0 warnings. (No new cmdlet added this step, no `psd1` change needed.)
 
@@ -776,7 +776,7 @@ Rebuild and commit the DLL as a follow-up commit, same pattern as prior tasks.
 Run: `dotnet test tests/PSWindowsImageTools.Tests`
 Expected: PASS — all pre-existing tests plus the 7 new ones across Tasks 1-3.
 
-- [ ] **Step 2: Build the full solution**
+- [x] **Step 2: Build the full solution**
 
 Run: `dotnet build PSWindowsImageTools.sln`
 Expected: PASS, 0 warnings, 0 errors.
