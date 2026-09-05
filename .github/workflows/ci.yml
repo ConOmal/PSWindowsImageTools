@@ -175,10 +175,12 @@ jobs:
           & "C:\Program Files\7-Zip\7z.exe" x C:\Win11_24H2.iso sources/install.wim -oC:\ -y | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "7z extraction failed (exit $LASTEXITCODE)" }
           Import-Module ./Module/PSWindowsImageTools/PSWindowsImageTools.psd1 -Force
-          $pro = Get-WindowsImageList -ImagePath C:\sources\install.wim | Where-Object { $_.Name -eq 'Windows 11 Pro' } | Select-Object -First 1
-          if (-not $pro) { throw "Windows 11 Pro index not found in install.wim" }
-          "Exporting index $($pro.Index) ($($pro.Name)) -> C:\PSWIT-real.wim"
-          dism /Export-Image /SourceImageFile:C:\sources\install.wim /SourceIndex:$($pro.Index) /DestinationImageFile:C:\PSWIT-real.wim /DestinationName:"Windows 11 Pro IT" /Compress:max
+          $wim = Get-WindowsImageList -ImagePath C:\sources\install.wim
+          $pos = [Array]::IndexOf([string[]]$wim.Name, 'Windows 11 Pro')
+          if ($pos -lt 0) { throw "Windows 11 Pro index not found in install.wim" }
+          $proIndex = $wim.Index[$pos]
+          "Exporting index $proIndex -> C:\PSWIT-real.wim"
+          dism /Export-Image /SourceImageFile:C:\sources\install.wim /SourceIndex:$proIndex /DestinationImageFile:C:\PSWIT-real.wim /DestinationName:"Windows 11 Pro IT" /Compress:max
           $exportExit = $LASTEXITCODE
           Remove-Item C:\Win11_24H2.iso, C:\sources -Recurse -Force -ErrorAction SilentlyContinue
           if ($exportExit -ne 0) {
