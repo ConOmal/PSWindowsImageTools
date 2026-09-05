@@ -1,17 +1,21 @@
 # Current Work Status
 
 ## Release State
-- **v2026.09.04.1 tagged and released** at https://github.com/ConOmal/PSWindowsImageTools/releases/tag/v2026.09.04.1
+- **v2026.09.04.2 tagged and released** at https://github.com/ConOmal/PSWindowsImageTools/releases/tag/v2026.09.04.2
   (fork; the stored credentials lack push access to upstream Grace-Solutions)
-- Phase-1 branch merged to main: **62 exported cmdlets** (drivers, component store, health check,
-  SBOM added to the 54-cmdlet baseline); unit tests 176/176; help guardrail green
-- First public release **v2025.09.04.1 is live on PSGallery** (54 cmdlets); v2026.09.04.1 published
-  via the `release.yml` workflow using the `PSGALLERY_API_KEY` fork secret
-- CI green on the release commit: build + 176 tests + help-coverage guardrail all pass on windows-latest
-- **CI now runs the integration suite on every push to main** (`integration` job): 7 passed /
-  11 honest-skips on the synthetic image (CBS-less); real-servicing coverage comes from the
-  manual-dispatch `integration-real` job, which VSS-captures the runner's own OS as a real baseline
-  WIM (cached per runner-image version) and runs all 17 tests against it
+- **Published to PSGallery** (88 cmdlets) via the `release.yml` workflow using the
+  `PSGALLERY_API_KEY` fork secret; release run green in 1m34s
+- Backlog complete: every phase-1 spec Non-goals item implemented (see Phase 5-8 below);
+  unit tests **695/695**; help guardrail green (88 commands, MAML in sync)
+- CI fully green on main post-release (build + unit tests + help guardrails + integration
+  suite), after three post-release fixes: honest skips for servicing-dependent integration
+  tests on the CBS-less synthetic image, thread-safe cmdlet output during parallel mounting
+  (buffered queues drained on the pipeline thread), and explicit pipeline enumeration of
+  mount results (`WriteObject(x, true)` — the single-arg overload emits arrays as one item,
+  which broke single-object parameter binding downstream)
+- **CI now runs the integration suite on every push to main** (`integration` job); the
+  real-servicing coverage comes from the manual-dispatch `integration-real` job, which uses
+  a real Windows 11 24H2 install.wim baseline (downloaded, Pro index exported, cached)
 - Upstream repo `origin` retained for history; `fork` remote points at the publish target
 
 ## Deferred
