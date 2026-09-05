@@ -547,9 +547,11 @@ Describe "Integration: app provisioning" -Tag Integration {
 
 Describe "Integration: image checkpoint" -Tag Integration {
 
-    It "checkpoints, modifies, and restores a mounted image" {
-        $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
-            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
+It "checkpoints, modifies, and restores a mounted image" {
+        # Take the first mount result explicitly: the checkpoint/restore cmdlets take a
+        # single MountedWindowsImage, and the mount pipeline must bind as a scalar here.
+        $mounted = @(Get-WindowsImageList -ImagePath $BaselineWim |
+            Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite)[0]
 
         try {
             $markerPath = Join-Path $mounted.MountPath.FullName "marker.txt"
