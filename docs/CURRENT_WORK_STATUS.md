@@ -27,6 +27,36 @@
 
 ## Completed
 
+### Phase 8 — Backlog Completion Batch (2026-09-04)
+- **Unattend validation** (spec `docs/superpowers/specs/2026-09-04-unattend-validation-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-unattend-validation.md`): `Test-UnattendXMLConfiguration` — 21
+  validation rules (well-formedness, namespace, pass validity incl. audit-mode-as-warning, duplicate
+  components, RunSynchronous/Asynchronous ordering, CopyProfile pass placement, deprecated OOBE
+  settings) with per-issue severity/pass/element-path reporting; pure XML logic; 58 tests.
+- **Dynamic Update discovery** (spec `docs/superpowers/specs/2026-09-04-dynamic-update-discovery-design.md`,
+  plan `docs/superpowers/plans/2026-09-04-dynamic-update-discovery.md`): `Get-WindowsDynamicUpdate` —
+  discovers SU/SafeOS/CU/Setup Dynamic Updates for a build from the Update Catalog (label table,
+  title classification, latest-per-type selection in apply order), reusing `WindowsUpdateCatalogService`
+  untouched; completes the discover → download → `Invoke-MediaDynamicUpdate` workflow; 55 tests.
+- **Compliance manifest** (spec `docs/superpowers/specs/2026-09-04-compliance-manifest-design.md`, plan
+  `docs/superpowers/plans/2026-09-04-compliance-manifest.md`): `Export-WindowsImageComplianceManifest`
+  — combines a snapshot with optional baseline-compliance and servicing-chain reports into a single
+  versioned JSON audit artifact with tool/image provenance; inventory counts only (the generic
+  inventory-export non-goal still stands); 17 tests.
+- **Capability repository** (spec `docs/superpowers/specs/2026-09-04-capability-repository-design.md`,
+  plan `docs/superpowers/plans/2026-09-04-capability-repository.md`): `Get-WindowsCapabilityRepository`
+  — indexes a FoD payload source directory by cab-filename convention (name/arch/language/version,
+  honest filename-derived limits documented), with regex filters and `-GroupByName`; 30 tests.
+- **Nullable flow fixes**: `SecurityBaselineService.GetBaselineCompliance` dropped redundant
+  `?? string.Empty` coalescing and `GetWindowsDynamicUpdateCmdlet` added a flow-breaking `return;`
+  after `ThrowTerminatingError` — the .NET 11 preview SDK's nullable analyzer treats `??` on
+  non-nullable params as a flow downgrade (visible only under `--no-incremental` builds); 5 warnings
+  eliminated, `--no-incremental` build now 0 warnings / 0 errors.
+- All 4 new cmdlets exported in the psd1 (no wildcards), help md + regenerated MAML in sync
+  (88 commands), DLL rebuilt and synced to `Module/PSWindowsImageTools/bin/`.
+- Unit tests now **695/695** (was 535); help guardrail green (4/4 checks). The phase-1 spec backlog
+  is now fully implemented.
+
 ### Phase 7 — Registry Config Batch + Continued Session Phases (2026-09-04)
 - **Services configuration** (spec `docs/superpowers/specs/2026-09-04-services-configuration-design.md`,
   plan `docs/superpowers/plans/2026-09-04-services-configuration.md`): `Get-WindowsImageService` /
@@ -178,7 +208,7 @@
   added/removed/changed per category)
 
 ## Module Totals
-- 84 exported cmdlets · 535 unit tests passing · build clean (0 warnings)
+- 88 exported cmdlets · 695 unit tests passing · build clean (0 warnings)
 
 ## Known Remaining Tech Debt
 - Remaining PSCmdlet-coupled services (catalog, ADK, wallpaper, unattend, autopilot) accept

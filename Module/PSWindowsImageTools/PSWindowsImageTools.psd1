@@ -155,6 +155,18 @@
         'Get-WindowsImageCheckpoint',
         'Restore-WindowsImageCheckpoint',
 
+        # Unattend Validation
+        'Test-UnattendXMLConfiguration',
+
+        # Dynamic Update Discovery
+        'Get-WindowsDynamicUpdate',
+
+        # Compliance Manifests
+        'Export-WindowsImageComplianceManifest',
+
+        # Capability Repository
+        'Get-WindowsCapabilityRepository',
+
         # Recipe-Driven Image Builds
         'New-WindowsImageRecipe',
         'Test-WindowsImageRecipe',

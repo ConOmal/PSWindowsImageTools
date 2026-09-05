@@ -3771,6 +3771,221 @@ $diff.Categories | Format-Table Category, Count</dev:code>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
     <command:details>
+      <command:name>Export-WindowsImageComplianceManifest</command:name>
+      <command:verb>Export</command:verb>
+      <command:noun>WindowsImageComplianceManifest</command:noun>
+      <maml:description>
+        <maml:para>Exports a compliance manifest combining an image snapshot's inventory summary with optional security baseline and servicing chain evaluations plus tool provenance.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Writes a single JSON compliance manifest (schema version 1.0) documenting the audited image's identity and provenance (tool name/version, manifest generation time, snapshot capture time, image name/index/path/mount), aggregate per-category inventory counts, the optional security baseline policy evaluation from Get-WindowsImageSecurityBaseline (per-entry verdicts and a rolled-up OverallStatus), and the optional servicing chain verdict from Get-WindowsImageServicingChain (SSU/LCU pairing and ordering).</maml:para>
+      <maml:para>This is not a generic inventory export: item lists stay in the snapshot JSON (Get-WindowsImageSnapshot -ExportPath) and the SBOM (Export-WindowsImageSBOM); the manifest carries aggregate counts and evaluation results only. The cmdlet is read-only regarding images — no DISM, no mounting. Without -Force the cmdlet refuses to overwrite an existing manifest file.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Export-WindowsImageComplianceManifest</maml:name>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="0" aliases="none">
+          <maml:name>Snapshot</maml:name>
+          <maml:description>
+            <maml:para>Snapshot from Get-WindowsImageSnapshot.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ImageSnapshot</command:parameterValue>
+          <dev:type>
+            <maml:name>ImageSnapshot</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="1" aliases="none">
+          <maml:name>DestinationPath</maml:name>
+          <maml:description>
+            <maml:para>Destination JSON file path for the compliance manifest. Parent directories are created when missing.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>BaselineReport</maml:name>
+          <maml:description>
+            <maml:para>Optional security baseline compliance report from Get-WindowsImageSecurityBaseline. When supplied, its per-entry verdicts and roll-up are embedded in the manifest and OverallStatus becomes Compliant or NonCompliant.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">WindowsImageSecurityBaselineReport</command:parameterValue>
+          <dev:type>
+            <maml:name>WindowsImageSecurityBaselineReport</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Force</maml:name>
+          <maml:description>
+            <maml:para>Overwrite the destination file if it exists.</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>ServicingChainReport</maml:name>
+          <maml:description>
+            <maml:para>Optional servicing chain report from Get-WindowsImageServicingChain. When supplied, its SSU/LCU classification and ordering verdict are embedded in the manifest.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ServicingChainReport</command:parameterValue>
+          <dev:type>
+            <maml:name>ServicingChainReport</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+          <maml:name>ProgressAction</maml:name>
+          <maml:description>
+            <maml:para>{{ Fill ProgressAction Description }}</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+          <dev:type>
+            <maml:name>ActionPreference</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>BaselineReport</maml:name>
+        <maml:description>
+          <maml:para>Optional security baseline compliance report from Get-WindowsImageSecurityBaseline. When supplied, its per-entry verdicts and roll-up are embedded in the manifest and OverallStatus becomes Compliant or NonCompliant.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">WindowsImageSecurityBaselineReport</command:parameterValue>
+        <dev:type>
+          <maml:name>WindowsImageSecurityBaselineReport</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="1" aliases="none">
+        <maml:name>DestinationPath</maml:name>
+        <maml:description>
+          <maml:para>Destination JSON file path for the compliance manifest. Parent directories are created when missing.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Force</maml:name>
+        <maml:description>
+          <maml:para>Overwrite the destination file if it exists.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>ServicingChainReport</maml:name>
+        <maml:description>
+          <maml:para>Optional servicing chain report from Get-WindowsImageServicingChain. When supplied, its SSU/LCU classification and ordering verdict are embedded in the manifest.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ServicingChainReport</command:parameterValue>
+        <dev:type>
+          <maml:name>ServicingChainReport</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByValue)" position="0" aliases="none">
+        <maml:name>Snapshot</maml:name>
+        <maml:description>
+          <maml:para>Snapshot from Get-WindowsImageSnapshot.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ImageSnapshot</command:parameterValue>
+        <dev:type>
+          <maml:name>ImageSnapshot</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+        <maml:name>ProgressAction</maml:name>
+        <maml:description>
+          <maml:para>{{ Fill ProgressAction Description }}</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+        <dev:type>
+          <maml:name>ActionPreference</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PSWindowsImageTools.Models.ImageSnapshot</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSWindowsImageTools.Models.WindowsImageComplianceManifest</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>- OverallStatus semantics: Unknown when no -BaselineReport is supplied; otherwise Compliant when the baseline report is fully compliant and NonCompliant otherwise. The servicing chain verdict is advisory and does not change OverallStatus.</maml:para>
+        <maml:para>- ToolVersion records the assembly version of PSWindowsImageTools.dll; the module manifest version (psd1 ModuleVersion) is not embedded.</maml:para>
+        <maml:para>- If a supplied report's ImageName does not match the snapshot's, the report is still embedded and a warning names both images.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Example 1: Manifest from a snapshot with baseline and servicing evidence</maml:title>
+        <dev:code>$manifest = Export-WindowsImageComplianceManifest -Snapshot $snapshot -BaselineReport $baseline -ServicingChainReport $servicing -DestinationPath C:\audit\win11-compliance.json
+$manifest.OverallStatus</dev:code>
+        <dev:remarks>
+          <maml:para>Combines the snapshot, the security baseline report and the servicing chain report into one audit artifact, saves it, and returns the manifest object.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Example 2: Manifest from a saved snapshot file with baseline only</maml:title>
+        <dev:code>$snapshot = Get-WindowsImageSnapshot -MountedImages $image | Select-Object -First 1
+Export-WindowsImageComplianceManifest -Snapshot $snapshot -BaselineReport (Get-WindowsImageSecurityBaseline -MountedImages $image) -DestinationPath .\manifest.json -Force</dev:code>
+        <dev:remarks>
+          <maml:para>Re-exports the manifest, overwriting any previous file.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version:</maml:linkText>
+        <maml:uri>https://github.com/Grace-Solutions/PSWindowsImageTools/blob/main/docs/CmdletReference.md</maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
       <command:name>Export-WindowsImageDriver</command:name>
       <command:verb>Export</command:verb>
       <command:noun>WindowsImageDriver</command:noun>
@@ -5748,6 +5963,464 @@ Get-MountedWindowsImage -Prune</dev:code>
       </maml:alert>
     </maml:alertSet>
     <command:examples />
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version:</maml:linkText>
+        <maml:uri>https://github.com/Grace-Solutions/PSWindowsImageTools/blob/main/docs/CmdletReference.md</maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Get-WindowsCapabilityRepository</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>WindowsCapabilityRepository</command:noun>
+      <maml:description>
+        <maml:para>Indexes a Features on Demand (FoD) payload source directory and reports the capability packages it offers.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Scans a Features on Demand payload source directory (FoD disk/ISO layout) for capability .cab packages, so users can discover what a source offers before calling Add-WindowsImageCapability -SourcePath.</maml:para>
+      <maml:para>Capability metadata is parsed from the .cab file names per the convention `Microsoft-Windows-&lt;CapabilityName&gt;~&lt;token&gt;~&lt;arch&gt;~&lt;language&gt;~&lt;version&gt;.cab`: the capability name is the segment after the Microsoft-Windows- prefix, and token, architecture, language and version are the following tilde-separated segments. Empty architecture or language segments are reported as 'neutral' (language-neutral packages); an empty version segment is reported as an empty string.</maml:para>
+      <maml:para>All metadata is filename-derived — the cab file itself is never opened. Files whose names do not follow the convention are skipped (with a verbose note and a count in the scan summary). Parsed names are not guaranteed to equal the DISM capability strings reported by Get-WindowsImageCapability; use that cmdlet on the target image to confirm the exact name before an add.</maml:para>
+      <maml:para>By default one entry is emitted per indexed cab. GroupByName collapses multi-architecture/multi-language cabs into one summary entry per capability name. Strictly read-only: no DISM, no mounted image.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-WindowsCapabilityRepository</maml:name>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="none">
+          <maml:name>SourcePath</maml:name>
+          <maml:description>
+            <maml:para>Directory containing the FoD payload .cab files to index (e.g., a FoD disk/ISO root or sources\LanguagesAndOptionalFeatures)</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="1" aliases="none">
+          <maml:name>Name</maml:name>
+          <maml:description>
+            <maml:para>Regular expression the capability name must match (e.g., 'Rsat\.')</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="2" aliases="none">
+          <maml:name>Architecture</maml:name>
+          <maml:description>
+            <maml:para>Regular expression the architecture must match (e.g., 'amd64'; 'neutral' for language-neutral)</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="3" aliases="none">
+          <maml:name>Language</maml:name>
+          <maml:description>
+            <maml:para>Regular expression the language must match (e.g., 'en-us'; 'neutral' for language-neutral)</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>GroupByName</maml:name>
+          <maml:description>
+            <maml:para>Collapse multi-architecture/multi-language packages into one summary entry per capability name</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+          <maml:name>ProgressAction</maml:name>
+          <maml:description>
+            <maml:para>Specifies the ProgressAction parameter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+          <dev:type>
+            <maml:name>ActionPreference</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="2" aliases="none">
+        <maml:name>Architecture</maml:name>
+        <maml:description>
+          <maml:para>Regular expression the architecture must match (e.g., 'amd64'; 'neutral' for language-neutral)</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>GroupByName</maml:name>
+        <maml:description>
+          <maml:para>Collapse multi-architecture/multi-language packages into one summary entry per capability name</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="3" aliases="none">
+        <maml:name>Language</maml:name>
+        <maml:description>
+          <maml:para>Regular expression the language must match (e.g., 'en-us'; 'neutral' for language-neutral)</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="1" aliases="none">
+        <maml:name>Name</maml:name>
+        <maml:description>
+          <maml:para>Regular expression the capability name must match (e.g., 'Rsat\.')</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="none">
+        <maml:name>SourcePath</maml:name>
+        <maml:description>
+          <maml:para>Directory containing the FoD payload .cab files to index (e.g., a FoD disk/ISO root or sources\LanguagesAndOptionalFeatures)</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+        <maml:name>ProgressAction</maml:name>
+        <maml:description>
+          <maml:para>Specifies the ProgressAction parameter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+        <dev:type>
+          <maml:name>ActionPreference</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSWindowsImageTools.Models.CapabilityRepositoryEntry[]</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:returnValue>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSWindowsImageTools.Models.CapabilityRepositoryGroup[]</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Only the top level of -SourcePath is scanned; point it at the directory that contains the cabs. This cmdlet never touches DISM or a mounted image.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>----------------- Example 1: Index a FoD disk -----------------</maml:title>
+        <dev:code>PS C:\&gt; Get-WindowsCapabilityRepository -SourcePath 'E:\'</dev:code>
+        <dev:remarks>
+          <maml:para>Lists every capability package found at the root of the FoD disk mounted on E:.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>----------- Example 2: Find RSAT packages for amd64 -----------</maml:title>
+        <dev:code>PS C:\&gt; Get-WindowsCapabilityRepository -SourcePath 'E:\' -Name 'Rsat\.' -Architecture 'amd64'</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>----------- Example 3: Summarize per capability name -----------</maml:title>
+        <dev:code>PS C:\&gt; Get-WindowsCapabilityRepository -SourcePath 'E:\' -GroupByName</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version:</maml:linkText>
+        <maml:uri>https://github.com/Grace-Solutions/PSWindowsImageTools/blob/main/docs/CmdletReference.md</maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Get-WindowsDynamicUpdate</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>WindowsDynamicUpdate</command:noun>
+      <maml:description>
+        <maml:para>Discovers the available Windows media Dynamic Updates for a Windows build in the Microsoft Update Catalog.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Discovers the Dynamic Updates needed by media servicing (Servicing Stack Update, Safe OS Dynamic Update, Latest Cumulative Update and Setup Dynamic Update) for a Windows build, so the workflow discover -&gt; download -&gt; apply becomes one-liner-able. The build is resolved to catalog title labels (for example build 26100 maps to "Windows 11 Version 24H2" and "Windows Server 2025"), one catalog search per unique query is performed (Servicing Stack / Cumulative / Dynamic Update), the results are classified into Dynamic Update types from their titles, filtered by architecture, deduplicated and reduced to the latest package per requested type in apply order (ServicingStack, SafeOS, Cumulative, Setup). A download URL is resolved for each selected package when cheaply available. Output feeds download plumbing (Save-WindowsUpdateCatalogResult) and Invoke-MediaDynamicUpdate for apply. This cmdlet is read-only and makes no changes to media or images.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Get-WindowsDynamicUpdate</maml:name>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByPropertyName)" position="0" aliases="none">
+          <maml:name>Build</maml:name>
+          <maml:description>
+            <maml:para>Windows build to discover Dynamic Updates for (e.g., "26100", "26100.1234" or "10.0.26100.1234").</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Architecture</maml:name>
+          <maml:description>
+            <maml:para>Target architecture; "amd64" and "x64" both map to the catalog's x64 results.</maml:para>
+          </maml:description>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" command:variableLength="false">amd64</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">x64</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">x86</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">arm64</command:parameterValue>
+          </command:parameterValueGroup>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>amd64</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>DebugMode</maml:name>
+          <maml:description>
+            <maml:para>Enables detailed catalog HTTP logging.</maml:para>
+          </maml:description>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>False</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>OSLabel</maml:name>
+          <maml:description>
+            <maml:para>Explicit catalog title label override (e.g., "Windows Server 2025"). By default the label(s) are resolved from the build number.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Type</maml:name>
+          <maml:description>
+            <maml:para>Dynamic Update type filter.</maml:para>
+          </maml:description>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" command:variableLength="false">ServicingStack</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">Cumulative</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">SafeOS</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">Setup</command:parameterValue>
+            <command:parameterValue required="false" command:variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>All</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+          <maml:name>ProgressAction</maml:name>
+          <maml:description>
+            <maml:para>Specifies the ProgressAction parameter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+          <dev:type>
+            <maml:name>ActionPreference</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Architecture</maml:name>
+        <maml:description>
+          <maml:para>Target architecture; "amd64" and "x64" both map to the catalog's x64 results.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>amd64</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByPropertyName)" position="0" aliases="none">
+        <maml:name>Build</maml:name>
+        <maml:description>
+          <maml:para>Windows build to discover Dynamic Updates for (e.g., "26100", "26100.1234" or "10.0.26100.1234").</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>DebugMode</maml:name>
+        <maml:description>
+          <maml:para>Enables detailed catalog HTTP logging.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>False</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>OSLabel</maml:name>
+        <maml:description>
+          <maml:para>Explicit catalog title label override (e.g., "Windows Server 2025"). By default the label(s) are resolved from the build number.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Type</maml:name>
+        <maml:description>
+          <maml:para>Dynamic Update type filter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>All</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+        <maml:name>ProgressAction</maml:name>
+        <maml:description>
+          <maml:para>Specifies the ProgressAction parameter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+        <dev:type>
+          <maml:name>ActionPreference</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.String</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSWindowsImageTools.Models.WindowsDynamicUpdate[]</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para>Catalog queries use title full-text search sorted by last-updated (first results page only, 25 rows per search). Shared client/server builds resolve both labels and run one search per label.</maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>-------------------------- Example 1 --------------------------</maml:title>
+        <dev:code>Get-WindowsDynamicUpdate -Build 26100</dev:code>
+        <dev:remarks>
+          <maml:para>Discovers the latest Servicing Stack, SafeOS, Cumulative and Setup Dynamic Updates for Windows 11 24H2 / Windows Server 2025 (amd64).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>-------------------------- Example 2 --------------------------</maml:title>
+        <dev:code>Get-WindowsDynamicUpdate -Build 26100.1234 -Type Cumulative -Architecture x64</dev:code>
+        <dev:remarks>
+          <maml:para>Discovers only the latest Cumulative Update for build 26100 (x64).</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>-------------------------- Example 3 --------------------------</maml:title>
+        <dev:code>Get-WindowsDynamicUpdate -Build 26100 | Select-Object UpdateType, KBNumber, SizeFormatted, DownloadUrl</dev:code>
+        <dev:remarks>
+          <maml:para>Shows the discovered updates with their KB article, size and resolved download URL.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
     <command:relatedLinks>
       <maml:navigationLink>
         <maml:linkText>Online Version:</maml:linkText>
@@ -15978,6 +16651,146 @@ $mounted = $images | Mount-WindowsImageList -ReadWrite -MountRoot "C:\Mount`"</d
       </maml:alert>
     </maml:alertSet>
     <command:examples />
+    <command:relatedLinks>
+      <maml:navigationLink>
+        <maml:linkText>Online Version:</maml:linkText>
+        <maml:uri>https://github.com/Grace-Solutions/PSWindowsImageTools/blob/main/docs/CmdletReference.md</maml:uri>
+      </maml:navigationLink>
+    </command:relatedLinks>
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp">
+    <command:details>
+      <command:name>Test-UnattendXMLConfiguration</command:name>
+      <command:verb>Test</command:verb>
+      <command:noun>UnattendXMLConfiguration</command:noun>
+      <maml:description>
+        <maml:para>Validates an Unattend XML configuration file and returns a structured validation report.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Read-only validation of an unattend.xml file. Checks well-formedness, root element and namespace, settings pass attributes (windowsPE, offlineServicing, generalize, specialize, oobeSystem), component name/duplicate/architecture sanity, RunSynchronous/RunAsynchronous command ordering, settings structure, and common mistakes (CopyProfile outside the specialize pass, deprecated SkipMachineOOBE/SkipUserOOBE settings). No DISM, no image mounting, no file writes.</maml:para>
+      <maml:para>Returns an UnattendValidationReport with per-issue details (Severity, Pass, ElementPath, Message, RuleId) plus an overall IsValid. IsValid is always computed over the complete issue set; -Severity only narrows the reported issues.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem>
+        <maml:name>Test-UnattendXMLConfiguration</maml:name>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByPropertyName, ByValue)" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Unattend XML file to validate.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">FileInfo</command:parameterValue>
+          <dev:type>
+            <maml:name>FileInfo</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Severity</maml:name>
+          <maml:description>
+            <maml:para>Minimum severity of issues to report. Warning (default) reports errors and warnings; Error reports errors only.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">UnattendValidationSeverity</command:parameterValue>
+          <dev:type>
+            <maml:name>UnattendValidationSeverity</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>Warning</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+          <maml:name>ProgressAction</maml:name>
+          <maml:description>
+            <maml:para>Specifies the ProgressAction parameter.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+          <dev:type>
+            <maml:name>ActionPreference</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="True (ByPropertyName, ByValue)" position="0" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Unattend XML file to validate.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">FileInfo</command:parameterValue>
+        <dev:type>
+          <maml:name>FileInfo</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Severity</maml:name>
+        <maml:description>
+          <maml:para>Minimum severity of issues to report. Warning (default) reports errors and warnings; Error reports errors only.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">UnattendValidationSeverity</command:parameterValue>
+        <dev:type>
+          <maml:name>UnattendValidationSeverity</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>Warning</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="proga">
+        <maml:name>ProgressAction</maml:name>
+        <maml:description>
+          <maml:para>Specifies the ProgressAction parameter.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">ActionPreference</command:parameterValue>
+        <dev:type>
+          <maml:name>ActionPreference</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>System.IO.FileInfo</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PSWindowsImageTools.Models.UnattendValidationReport</maml:name>
+        </dev:type>
+        <maml:description>
+          <maml:para></maml:para>
+        </maml:description>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>-------------------------- Example 1 --------------------------</maml:title>
+        <dev:code>PS C:\&gt; Test-UnattendXMLConfiguration -Path C:\media\unattend.xml</dev:code>
+        <dev:remarks>
+          <maml:para>Validates the file and reports all errors and warnings.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>-------------------------- Example 2 --------------------------</maml:title>
+        <dev:code>PS C:\&gt; Test-UnattendXMLConfiguration -Path C:\media\unattend.xml -Severity Error</dev:code>
+        <dev:remarks>
+          <maml:para>Validates the file and reports errors only; the report is valid (exit logic can key on IsValid) when there are no errors.</maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
     <command:relatedLinks>
       <maml:navigationLink>
         <maml:linkText>Online Version:</maml:linkText>
