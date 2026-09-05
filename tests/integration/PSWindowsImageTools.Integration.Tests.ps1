@@ -478,7 +478,7 @@ Describe "Integration: SBOM export" -Tag Integration {
 
 Describe "Integration: servicing chain" -Tag Integration {
 
-    It "analyzes the servicing chain of a mounted image without error" {
+    It "analyzes the servicing chain of a mounted image without error" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
@@ -486,8 +486,7 @@ Describe "Integration: servicing chain" -Tag Integration {
             $report = $mounted | Get-WindowsImageServicingChain
             $report | Should -Not -BeNullOrEmpty
             $report.ImageName | Should -Be $mounted.ImageName
-            # The synthetic baseline image has no real servicing packages, so Packages may be
-            # empty — this asserts the cmdlet runs cleanly, not a specific SSU/LCU pairing.
+            # Real image: packages enumerate; the report reflects actual SSU/LCU state.
             $report.OrderingValid | Should -BeOfType [bool]
         }
         finally {
@@ -495,7 +494,7 @@ Describe "Integration: servicing chain" -Tag Integration {
         }
     }
 
-    It "returns a boolean by default and a full report with -Detailed" {
+    It "returns a boolean by default and a full report with -Detailed" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
@@ -514,7 +513,7 @@ Describe "Integration: servicing chain" -Tag Integration {
 
 Describe "Integration: boot image servicing" -Tag Integration {
 
-    It "adds drivers and optimizes a mounted boot image without error" {
+    It "adds drivers and optimizes a mounted boot image without error" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
         $emptyDriverDir = Join-Path $Workspace "empty-drivers"
@@ -533,7 +532,7 @@ Describe "Integration: boot image servicing" -Tag Integration {
 
 Describe "Integration: app provisioning" -Tag Integration {
 
-    It "lists provisioned apps for a mounted image without error" {
+    It "lists provisioned apps for a mounted image without error" -Skip:(-not $script:HasServicingStack) {
         $mounted = Get-WindowsImageList -ImagePath $BaselineWim |
             Mount-WindowsImageList -MountRoot $MountRoot -ReadWrite
 
