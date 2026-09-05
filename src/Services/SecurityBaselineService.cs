@@ -288,8 +288,8 @@ namespace PSWindowsImageTools.Services
             var baseline = entries ?? GetBaselineEntries();
             var report = new WindowsImageSecurityBaselineReport
             {
-                ImageName = imageName ?? string.Empty,
-                MountPath = mountPath ?? string.Empty
+                ImageName = imageName,
+                MountPath = mountPath
             };
 
             // Reads are grouped per hive (one OpenHive per hive file); the report is
