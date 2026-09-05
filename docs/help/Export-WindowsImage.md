@@ -197,6 +197,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -SplitSize
+Maximum size of each split part in MB (optional). When set, the export is written as split .swm parts of at most this size instead of a single .wim.
+
+```yaml
+Type: Int64
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -ProgressAction
 Specifies the ProgressAction parameter.
 

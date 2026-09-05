@@ -314,7 +314,7 @@ namespace PSWindowsImageTools.Cmdlets
             }
 
             // Search the catalog
-            using var catalogService = new WindowsUpdateCatalogService();
+            using var catalogService = new WindowsUpdateCatalogService(ModuleCallbacks.FromCmdlet(this));
             var criteria = new WindowsUpdateSearchCriteria
             {
                 Query = query!,
@@ -328,7 +328,7 @@ namespace PSWindowsImageTools.Cmdlets
                 "Searching Microsoft Update Catalog",
                 $"Query: {query} ({Architecture})", 0);
 
-            var searchResult = catalogService.SearchUpdates(criteria, includeDownloadUrls: true, cmdlet: this);
+            var searchResult = catalogService.SearchUpdates(criteria, includeDownloadUrls: true);
             if (!searchResult.Success || searchResult.Updates.Count == 0)
             {
                 WriteWarning($"Catalog search returned no results for '{query}': {searchResult.ErrorMessage ?? "no updates found"}");

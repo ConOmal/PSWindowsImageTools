@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Management.Automation;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -56,9 +55,8 @@ namespace PSWindowsImageTools.Services
         /// </summary>
         /// <param name="hive">Registry hive (use HKEY_* constants)</param>
         /// <param name="subKey">Subkey path</param>
-        /// <param name="cmdlet">Cmdlet for logging</param>
-        /// <returns>Registry key handle or IntPtr.Zero if failed</returns>
-        public static IntPtr OpenKey(int hive, string subKey, PSCmdlet? cmdlet = null)
+                /// <returns>Registry key handle or IntPtr.Zero if failed</returns>
+        public static IntPtr OpenKey(int hive, string subKey)
         {
             try
             {
@@ -92,9 +90,8 @@ namespace PSWindowsImageTools.Services
         /// Enumerates subkeys of a registry key
         /// </summary>
         /// <param name="keyHandle">Parent key handle</param>
-        /// <param name="cmdlet">Cmdlet for logging</param>
-        /// <returns>List of subkey names</returns>
-        public static List<string> EnumerateSubKeys(IntPtr keyHandle, PSCmdlet? cmdlet = null)
+                /// <returns>List of subkey names</returns>
+        public static List<string> EnumerateSubKeys(IntPtr keyHandle)
         {
             var subKeys = new List<string>();
             
@@ -140,9 +137,8 @@ namespace PSWindowsImageTools.Services
         /// </summary>
         /// <param name="keyHandle">Registry key handle</param>
         /// <param name="valueName">Value name</param>
-        /// <param name="cmdlet">Cmdlet for logging</param>
-        /// <returns>String value or null if not found</returns>
-        public static string? GetStringValue(IntPtr keyHandle, string valueName, PSCmdlet? cmdlet = null)
+                /// <returns>String value or null if not found</returns>
+        public static string? GetStringValue(IntPtr keyHandle, string valueName)
         {
             if (keyHandle == IntPtr.Zero)
                 return null;
@@ -176,9 +172,8 @@ namespace PSWindowsImageTools.Services
         /// </summary>
         /// <param name="keyHandle">Registry key handle</param>
         /// <param name="valueName">Value name</param>
-        /// <param name="cmdlet">Cmdlet for logging</param>
-        /// <returns>DWORD value or null if not found</returns>
-        public static int? GetDWordValue(IntPtr keyHandle, string valueName, PSCmdlet? cmdlet = null)
+                /// <returns>DWORD value or null if not found</returns>
+        public static int? GetDWordValue(IntPtr keyHandle, string valueName)
         {
             if (keyHandle == IntPtr.Zero)
                 return null;
@@ -205,9 +200,8 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Enumerates registry entries in the uninstall section
         /// </summary>
-        /// <param name="cmdlet">Cmdlet for logging</param>
-        /// <returns>Dictionary of registry entries with their properties</returns>
-        public static Dictionary<string, Dictionary<string, string>> EnumerateUninstallEntries(PSCmdlet? cmdlet = null)
+                /// <returns>Dictionary of registry entries with their properties</returns>
+        public static Dictionary<string, Dictionary<string, string>> EnumerateUninstallEntries()
         {
             var entries = new Dictionary<string, Dictionary<string, string>>();
             
@@ -219,17 +213,17 @@ namespace PSWindowsImageTools.Services
 
             foreach (var registryPath in registryPaths)
             {
-                var baseKey = OpenKey(HKEY_LOCAL_MACHINE, registryPath, cmdlet);
+                var baseKey = OpenKey(HKEY_LOCAL_MACHINE, registryPath);
                 if (baseKey == IntPtr.Zero)
                     continue;
 
                 try
                 {
-                    var subKeys = EnumerateSubKeys(baseKey, cmdlet);
+                    var subKeys = EnumerateSubKeys(baseKey);
                     
                     foreach (var subKeyName in subKeys)
                     {
-                        var subKey = OpenKey(HKEY_LOCAL_MACHINE, $@"{registryPath}\{subKeyName}", cmdlet);
+                        var subKey = OpenKey(HKEY_LOCAL_MACHINE, $@"{registryPath}\{subKeyName}");
                         if (subKey == IntPtr.Zero)
                             continue;
 
@@ -238,14 +232,14 @@ namespace PSWindowsImageTools.Services
                             var properties = new Dictionary<string, string>();
                             
                             // Get common uninstall properties
-                            var displayName = GetStringValue(subKey, "DisplayName", cmdlet);
+                            var displayName = GetStringValue(subKey, "DisplayName");
                             if (!string.IsNullOrEmpty(displayName))
                             {
                                 properties["DisplayName"] = displayName ?? string.Empty;
-                                properties["InstallLocation"] = GetStringValue(subKey, "InstallLocation", cmdlet) ?? string.Empty;
-                                properties["DisplayVersion"] = GetStringValue(subKey, "DisplayVersion", cmdlet) ?? string.Empty;
-                                properties["Publisher"] = GetStringValue(subKey, "Publisher", cmdlet) ?? string.Empty;
-                                properties["InstallDate"] = GetStringValue(subKey, "InstallDate", cmdlet) ?? string.Empty;
+                                properties["InstallLocation"] = GetStringValue(subKey, "InstallLocation") ?? string.Empty;
+                                properties["DisplayVersion"] = GetStringValue(subKey, "DisplayVersion") ?? string.Empty;
+                                properties["Publisher"] = GetStringValue(subKey, "Publisher") ?? string.Empty;
+                                properties["InstallDate"] = GetStringValue(subKey, "InstallDate") ?? string.Empty;
                                 properties["RegistryPath"] = $@"{registryPath}\{subKeyName}";
                                 
                                 entries[subKeyName] = properties;
@@ -267,3 +261,5 @@ namespace PSWindowsImageTools.Services
         }
     }
 }
+
+

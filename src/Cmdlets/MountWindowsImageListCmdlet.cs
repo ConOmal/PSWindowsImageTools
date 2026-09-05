@@ -5,6 +5,8 @@ using System.Linq;
 using System.Management.Automation;
 using PSWindowsImageTools.Models;
 using PSWindowsImageTools.Services;
+using System.Threading.Tasks;
+using System.Threading;
 
 namespace PSWindowsImageTools.Cmdlets
 {
@@ -41,6 +43,12 @@ namespace PSWindowsImageTools.Cmdlets
         [Parameter(Mandatory = false)]
         [ValidateNotNull]
         public DirectoryInfo? MountRoot { get; set; }
+
+        /// <summary>
+        /// Maximum parallel mount operations (0 = auto based on processor count)
+        /// </summary>
+        [Parameter(Mandatory = false)]
+        public int MaxParallel { get; set; } = 0;
 
         private readonly List<WindowsImageInfo> _allImageInfo = new List<WindowsImageInfo>();
 
@@ -87,11 +95,6 @@ namespace PSWindowsImageTools.Cmdlets
                 // Group images by source path to generate one GUID per WIM file
                 var imageGroups = _allImageInfo.GroupBy(img => img.SourcePath).ToList();
 
-                // Show initial progress
-                LoggingService.WriteProgress(this, "Mounting Windows Images",
-                    $"Found {_allImageInfo.Count} images to mount",
-                    $"Preparing to mount {_allImageInfo.Count} images", 0);
-
                 // Generate one GUID per unique source path for mount organization
                 var sourcePathGuids = new Dictionary<string, string>();
                 foreach (var imageInfo in _allImageInfo)
@@ -102,24 +105,25 @@ namespace PSWindowsImageTools.Cmdlets
                     }
                 }
 
-                // Mount each image
-                for (int i = 0; i < _allImageInfo.Count; i++)
-                {
-                    var imageInfo = _allImageInfo[i];
-                    var wimGuid = sourcePathGuids[imageInfo.SourcePath];
+                // Parallel mounting logic
+                var parallelOptions = new ParallelOptions();
+                parallelOptions.MaxDegreeOfParallelism = MaxParallel > 0 ? MaxParallel : Environment.ProcessorCount;
+                int processedCount = 0;
+                object lockObj = new object();
 
+                Parallel.ForEach(_allImageInfo, parallelOptions, imageInfo =>
+                {
+                    int currentIndex = Interlocked.Increment(ref processedCount);
+                    var wimGuid = sourcePathGuids[imageInfo.SourcePath];
                     try
                     {
-                        var mountedImage = MountSingleImage(imageInfo, mountRoot, wimGuid, i + 1, _allImageInfo.Count);
-                        mountedImages.Add(mountedImage);
-
-                        LoggingService.WriteVerbose(this, $"[{i + 1} of {_allImageInfo.Count}] - Successfully mounted: {mountedImage.MountPath}");
+                        var mountedImage = MountSingleImage(imageInfo, mountRoot, wimGuid, currentIndex, _allImageInfo.Count);
+                        lock (lockObj) { mountedImages.Add(mountedImage); }
+                        LoggingService.WriteVerbose(this, $"[{currentIndex} of {_allImageInfo.Count}] - Successfully mounted: {mountedImage.MountPath}");
                     }
                     catch (Exception ex)
                     {
-                        LoggingService.WriteError(this, $"[{i + 1} of {_allImageInfo.Count}] - Failed to mount image {imageInfo.Index}: {ex.Message}", ex);
-
-                        // Create a failed mount object for tracking
+                        LoggingService.WriteError(this, $"[{currentIndex} of {_allImageInfo.Count}] - Failed to mount image {imageInfo.Index}: {ex.Message}", ex);
                         var failedMount = new MountedWindowsImage
                         {
                             MountId = Guid.NewGuid().ToString(),
@@ -134,9 +138,9 @@ namespace PSWindowsImageTools.Cmdlets
                             ImageSize = imageInfo.Size,
                             IsReadOnly = !ReadWrite.IsPresent
                         };
-                        mountedImages.Add(failedMount);
+                        lock (lockObj) { mountedImages.Add(failedMount); }
                     }
-                }
+                });
 
                 LoggingService.CompleteProgress(this, "Mounting Windows Images");
 

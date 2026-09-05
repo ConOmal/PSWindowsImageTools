@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Management.Automation;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -78,12 +77,38 @@ namespace PSWindowsImageTools.Services
         private const string SortFieldLastUpdated = "LastUpdated";
 
         private readonly HttpClient _httpClient;
+        private readonly ModuleCallbacks _callbacks;
         private bool _disposed = false;
 
         /// <summary>
         /// Initializes a new instance of the Windows Update Catalog Service
         /// </summary>
-        public WindowsUpdateCatalogService()
+        public WindowsUpdateCatalogService() : this(ModuleCallbacks.Silent)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the Windows Update Catalog Service
+        /// </summary>
+        /// <param name="callbacks">Callbacks for host communication (verbose/warning/error)</param>
+        public WindowsUpdateCatalogService(ModuleCallbacks callbacks) : this(callbacks, CreateDefaultHttpClient())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the Windows Update Catalog Service with an explicit HTTP client
+        /// (used by tests to stub catalog responses)
+        /// </summary>
+        internal WindowsUpdateCatalogService(ModuleCallbacks callbacks, HttpClient httpClient)
+        {
+            _callbacks = callbacks ?? ModuleCallbacks.Silent;
+            _httpClient = httpClient;
+        }
+
+        /// <summary>
+        /// Creates the default HTTP client configured to mimic browser behavior (required by catalog)
+        /// </summary>
+        private static HttpClient CreateDefaultHttpClient()
         {
             // Create HttpClientHandler with automatic decompression
             var handler = new HttpClientHandler()
@@ -91,19 +116,20 @@ namespace PSWindowsImageTools.Services
                 AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
             };
 
-            _httpClient = new HttpClient(handler);
+            var httpClient = new HttpClient(handler);
 
             // Configure HttpClient to mimic browser behavior (required by catalog)
-            _httpClient.DefaultRequestHeaders.Add("User-Agent",
+            httpClient.DefaultRequestHeaders.Add("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-            _httpClient.DefaultRequestHeaders.Add("Accept",
+            httpClient.DefaultRequestHeaders.Add("Accept",
                 "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
-            _httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
-            _httpClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
-            _httpClient.DefaultRequestHeaders.Add("Connection", "keep-alive");
-            _httpClient.DefaultRequestHeaders.Add("Upgrade-Insecure-Requests", "1");
+            httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
+            httpClient.DefaultRequestHeaders.Add("Accept-Encoding", "gzip, deflate, br");
+            httpClient.DefaultRequestHeaders.Add("Connection", "keep-alive");
+            httpClient.DefaultRequestHeaders.Add("Upgrade-Insecure-Requests", "1");
 
-            _httpClient.Timeout = TimeSpan.FromMinutes(5);
+            httpClient.Timeout = TimeSpan.FromMinutes(5);
+            return httpClient;
         }
 
         /// <summary>
@@ -112,9 +138,8 @@ namespace PSWindowsImageTools.Services
         /// <param name="criteria">Search criteria</param>
         /// <param name="includeDownloadUrls">Whether to include download URLs (optional, causes extra requests)</param>
         /// <param name="debugMode">Enable debug mode with detailed HTTP logging and global variables</param>
-        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
         /// <returns>Search results with session state and warnings</returns>
-        public WindowsUpdateSearchResult SearchUpdates(WindowsUpdateSearchCriteria criteria, bool includeDownloadUrls = false, bool debugMode = false, PSCmdlet? cmdlet = null)
+        public WindowsUpdateSearchResult SearchUpdates(WindowsUpdateSearchCriteria criteria, bool includeDownloadUrls = false, bool debugMode = false)
         {
             var result = new WindowsUpdateSearchResult
             {
@@ -123,19 +148,19 @@ namespace PSWindowsImageTools.Services
             };
 
             var session = new CatalogSession();
-            var searchStartTime = LoggingService.LogOperationStartWithTimestamp(cmdlet, ServiceName,
+            var searchStartTime = LogOperationStart(
                 "Windows Update Catalog Search", $"Query: '{criteria.Query}'");
 
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
+                _callbacks.Verbose?.Invoke(
                     $"Searching Windows Update Catalog: '{criteria.Query}'");
 
                 // Step 1: Initial search request
                 var searchUrl = BuildSearchUrl(criteria);
-                LoggingService.WriteVerbose(cmdlet, ServiceName, $"Search URL: {searchUrl}");
+                _callbacks.Verbose?.Invoke($"Search URL: {searchUrl}");
 
-                var searchResponse = PerformCatalogRequest(searchUrl, "GET", null, debugMode, cmdlet);
+                var searchResponse = PerformCatalogRequest(searchUrl, "GET", null, debugMode);
                 if (!searchResponse.Success)
                 {
                     result.Success = false;
@@ -145,10 +170,10 @@ namespace PSWindowsImageTools.Services
                 }
 
                 // Step 2: Parse initial response and extract ViewState
-                var parseResult = ParseCatalogResponse(searchResponse.Html, session, debugMode, cmdlet);
+                var parseResult = ParseCatalogResponse(searchResponse.Html, session, debugMode);
                 if (parseResult.NoResults)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"No results found for query: {criteria.Query}");
+                    _callbacks.Verbose?.Invoke($"No results found for query: {criteria.Query}");
                     result.Updates = new List<WindowsUpdate>();
                     result.Success = true;
                     return result;
@@ -158,7 +183,7 @@ namespace PSWindowsImageTools.Services
                 var updates = parseResult.Updates;
                 if (!string.IsNullOrEmpty(criteria.SortBy) || !string.IsNullOrEmpty(criteria.SortDirection))
                 {
-                    var sortResult = ApplySorting(searchUrl, session, criteria, cmdlet);
+                    var sortResult = ApplySorting(searchUrl, session, criteria);
                     if (sortResult.Success)
                     {
                         updates = sortResult.Updates;
@@ -173,26 +198,26 @@ namespace PSWindowsImageTools.Services
                 // Step 4: Include download URLs if requested
                 if (includeDownloadUrls)
                 {
-                    IncludeDownloadUrls(updates, session, cmdlet);
+                    IncludeDownloadUrls(updates, session);
                 }
 
                 // Step 5: Apply additional filtering and pagination
-                var filteredUpdates = ApplyFilters(updates, criteria, cmdlet);
+                var filteredUpdates = ApplyFilters(updates, criteria);
                 result.Updates = filteredUpdates;
                 result.TotalCount = updates.Count;
                 result.TotalPages = (int)Math.Ceiling((double)updates.Count / criteria.PageSize);
                 result.Success = true;
 
-                LoggingService.LogOperationCompleteWithTimestamp(cmdlet, ServiceName, "Windows Update Catalog Search", searchStartTime,
+                LogOperationComplete( "Windows Update Catalog Search", searchStartTime,
                     $"Found {result.Updates.Count} updates (Total: {result.TotalCount})");
 
                 // Add any warnings to the result
                 if (session.Warnings.Any())
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Search completed with {session.Warnings.Count} warnings");
+                    _callbacks.Verbose?.Invoke($"Search completed with {session.Warnings.Count} warnings");
                     foreach (var warning in session.Warnings)
                     {
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"Warning: {warning}");
+                        _callbacks.Verbose?.Invoke($"Warning: {warning}");
                     }
                 }
             }
@@ -201,7 +226,7 @@ namespace PSWindowsImageTools.Services
                 result.Success = false;
                 result.ErrorMessage = ex.Message;
                 session.Warnings.Add($"Search exception: {ex.Message}");
-                LoggingService.WriteError(cmdlet, ServiceName, $"Windows Update Catalog search failed: {ex.Message}", ex);
+                _callbacks.Error?.Invoke(ex, $"Windows Update Catalog search failed: {ex.Message}");
             }
             finally
             {
@@ -214,7 +239,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Performs a catalog request with proper error handling and debug logging
         /// </summary>
-        private CatalogRequestResult PerformCatalogRequest(string url, string method, Dictionary<string, string>? formData, bool debugMode, PSCmdlet? cmdlet)
+        private CatalogRequestResult PerformCatalogRequest(string url, string method, Dictionary<string, string>? formData, bool debugMode)
         {
             var result = new CatalogRequestResult();
 
@@ -222,10 +247,10 @@ namespace PSWindowsImageTools.Services
             {
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Making {method} request to: {url}");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Making {method} request to: {url}");
                     if (formData != null && formData.Any())
                     {
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Form data: {string.Join(", ", formData.Select(kvp => $"{kvp.Key}={kvp.Value?.Substring(0, Math.Min(100, kvp.Value?.Length ?? 0))}..."))}");
+                        _callbacks.Verbose?.Invoke($"[DEBUG] Form data: {string.Join(", ", formData.Select(kvp => $"{kvp.Key}={kvp.Value?.Substring(0, Math.Min(100, kvp.Value?.Length ?? 0))}..."))}");
                     }
                 }
 
@@ -244,17 +269,8 @@ namespace PSWindowsImageTools.Services
                 // Debug logging for response
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Response Status: {response.StatusCode} ({(int)response.StatusCode})");
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Response Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}={string.Join(";", h.Value)}"))}");
-
-                    // Set global variables for debugging
-                    if (cmdlet != null)
-                    {
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogResponse", response);
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogStatusCode", response.StatusCode);
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogUrl", url);
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogMethod", method);
-                    }
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Response Status: {response.StatusCode} ({(int)response.StatusCode})");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Response Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}={string.Join(";", h.Value)}"))}");
                 }
 
                 response.EnsureSuccessStatusCode();
@@ -264,15 +280,8 @@ namespace PSWindowsImageTools.Services
                 // Debug logging for content
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Response Content Length: {result.Html.Length} characters");
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Response Content Preview: {result.Html.Substring(0, Math.Min(500, result.Html.Length))}...");
-
-                    // Set global variables for content analysis
-                    if (cmdlet != null)
-                    {
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogHtml", result.Html);
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogContentLength", result.Html.Length);
-                    }
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Response Content Length: {result.Html.Length} characters");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Response Content Preview: {result.Html.Substring(0, Math.Min(500, result.Html.Length))}...");
                 }
             }
             catch (Exception ex)
@@ -282,21 +291,14 @@ namespace PSWindowsImageTools.Services
 
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Request failed with exception: {ex.GetType().Name}: {ex.Message}");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Request failed with exception: {ex.GetType().Name}: {ex.Message}");
                     if (ex.InnerException != null)
                     {
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-                    }
-
-                    // Set global variables for error analysis
-                    if (cmdlet != null)
-                    {
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogError", ex);
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogErrorMessage", ex.Message);
+                        _callbacks.Verbose?.Invoke($"[DEBUG] Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
                     }
                 }
 
-                LoggingService.WriteError(cmdlet, ServiceName, $"Catalog request failed: {ex.Message}", ex);
+                _callbacks.Error?.Invoke(ex, $"Catalog request failed: {ex.Message}");
             }
 
             return result;
@@ -305,7 +307,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Parses catalog response and extracts ViewState and updates
         /// </summary>
-        private CatalogParseResult ParseCatalogResponse(string html, CatalogSession session, bool debugMode, PSCmdlet? cmdlet)
+        private CatalogParseResult ParseCatalogResponse(string html, CatalogSession session, bool debugMode)
         {
             var result = new CatalogParseResult();
 
@@ -313,7 +315,7 @@ namespace PSWindowsImageTools.Services
             {
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Starting HTML parsing, content length: {html.Length}");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Starting HTML parsing, content length: {html.Length}");
                 }
 
                 var doc = new HtmlDocument();
@@ -321,16 +323,10 @@ namespace PSWindowsImageTools.Services
 
                 if (debugMode)
                 {
-                    // Set global variables for HTML analysis
-                    if (cmdlet != null)
-                    {
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogDocument", doc);
-                        cmdlet.SessionState.PSVariable.Set("Global:LastCatalogHtmlContent", html);
-                    }
 
                     // Check for various elements
                     var allTables = doc.DocumentNode.SelectNodes("//table");
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Found {allTables?.Count ?? 0} tables in HTML");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Found {allTables?.Count ?? 0} tables in HTML");
 
                     if (allTables != null)
                     {
@@ -339,7 +335,7 @@ namespace PSWindowsImageTools.Services
                             var id = table.GetAttributeValue("id", "");
                             var className = table.GetAttributeValue("class", "");
                             var rowCount = table.SelectNodes(".//tr")?.Count ?? 0;
-                            LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Table: ID='{id}', Class='{className}', Rows={rowCount}");
+                            _callbacks.Verbose?.Invoke($"[DEBUG] Table: ID='{id}', Class='{className}', Rows={rowCount}");
                         }
                     }
                 }
@@ -348,10 +344,10 @@ namespace PSWindowsImageTools.Services
                 var noResultsElement = doc.GetElementbyId(NoResultsElementId);
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] No results element found: {noResultsElement != null}");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] No results element found: {noResultsElement != null}");
                     if (noResultsElement != null)
                     {
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] No results element text: '{noResultsElement.InnerText?.Trim()}'");
+                        _callbacks.Verbose?.Invoke($"[DEBUG] No results element text: '{noResultsElement.InnerText?.Trim()}'");
                     }
                 }
 
@@ -369,11 +365,11 @@ namespace PSWindowsImageTools.Services
                 var resultsTable = doc.GetElementbyId(ResultsTableId);
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Results table found: {resultsTable != null}");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Results table found: {resultsTable != null}");
                     if (resultsTable != null)
                     {
                         var tableRows = resultsTable.SelectNodes(".//tr");
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Results table has {tableRows?.Count ?? 0} rows");
+                        _callbacks.Verbose?.Invoke($"[DEBUG] Results table has {tableRows?.Count ?? 0} rows");
                     }
                 }
 
@@ -390,13 +386,13 @@ namespace PSWindowsImageTools.Services
 
                 if (debugMode)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Total table rows: {allRows?.Count ?? 0}");
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Data rows (excluding header): {rows?.Count ?? 0}");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Total table rows: {allRows?.Count ?? 0}");
+                    _callbacks.Verbose?.Invoke($"[DEBUG] Data rows (excluding header): {rows?.Count ?? 0}");
                     if (rows != null && rows.Any())
                     {
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] First row ID: {rows.First().Id}");
+                        _callbacks.Verbose?.Invoke($"[DEBUG] First row ID: {rows.First().Id}");
                         var firstRowCellCount = rows.First().SelectNodes(".//td")?.Count ?? 0;
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] First row cell count: {firstRowCellCount}");
+                        _callbacks.Verbose?.Invoke($"[DEBUG] First row cell count: {firstRowCellCount}");
                     }
                 }
 
@@ -412,18 +408,18 @@ namespace PSWindowsImageTools.Services
                 {
                     try
                     {
-                        var update = ParseUpdateRow(row, cmdlet);
+                        var update = ParseUpdateRow(row);
                         if (update != null)
                         {
                             result.Updates.Add(update);
                             if (debugMode)
                             {
-                                LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Parsed update: {update.UpdateId} - {update.Title}");
+                                _callbacks.Verbose?.Invoke($"[DEBUG] Parsed update: {update.UpdateId} - {update.Title}");
                             }
                         }
                         else if (debugMode)
                         {
-                            LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Failed to parse row: {row.Id}");
+                            _callbacks.Verbose?.Invoke($"[DEBUG] Failed to parse row: {row.Id}");
                         }
                     }
                     catch (Exception ex)
@@ -431,18 +427,18 @@ namespace PSWindowsImageTools.Services
                         session.Warnings.Add($"Failed to parse update row {row.Id}: {ex.Message}");
                         if (debugMode)
                         {
-                            LoggingService.WriteVerbose(cmdlet, ServiceName, $"[DEBUG] Exception parsing row {row.Id}: {ex}");
+                            _callbacks.Verbose?.Invoke($"[DEBUG] Exception parsing row {row.Id}: {ex}");
                         }
                     }
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName, $"Parsed {result.Updates.Count} updates from catalog response");
+                _callbacks.Verbose?.Invoke($"Parsed {result.Updates.Count} updates from catalog response");
             }
             catch (Exception ex)
             {
                 result.NoResults = true;
                 session.Warnings.Add($"Failed to parse catalog response: {ex.Message}");
-                LoggingService.WriteError(cmdlet, ServiceName, $"Failed to parse catalog response: {ex.Message}", ex);
+                _callbacks.Error?.Invoke(ex, $"Failed to parse catalog response: {ex.Message}");
             }
 
             return result;
@@ -453,15 +449,14 @@ namespace PSWindowsImageTools.Services
         /// Based on Windows Update Catalog specification
         /// </summary>
         /// <param name="updateId">Update ID</param>
-        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
         /// <returns>List of download URLs as properly formed Uri objects</returns>
-        public List<Uri> GetDownloadUrls(string updateId, PSCmdlet? cmdlet = null)
+        public List<Uri> GetDownloadUrls(string updateId)
         {
             var downloadUrls = new List<Uri>();
 
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, $"Getting download URLs for update: {updateId}");
+                _callbacks.Verbose?.Invoke($"Getting download URLs for update: {updateId}");
 
                 // Use specification format: POST form data to DownloadDialog.aspx
                 var postData = new Dictionary<string, string>
@@ -471,21 +466,22 @@ namespace PSWindowsImageTools.Services
                 };
 
                 var downloadUrl = $"{CatalogBaseUrl}/DownloadDialog.aspx";
-                var requestResult = PerformCatalogRequest(downloadUrl, "POST", postData, false, cmdlet);
+                var requestResult = PerformCatalogRequest(downloadUrl, "POST", postData, false);
 
                 if (requestResult.Success)
                 {
-                    downloadUrls = ParseDownloadUrls(requestResult.Html, cmdlet);
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Found {downloadUrls.Count} download URLs for update {updateId}");
+                    downloadUrls = ParseDownloadUrls(requestResult.Html);
+                    _callbacks.Verbose?.Invoke($"Found {downloadUrls.Count} download URLs for update {updateId}");
                 }
                 else
                 {
-                    LoggingService.WriteError(cmdlet, ServiceName, $"Failed to get download URLs for update {updateId}: {requestResult.ErrorMessage}");
+                    var errorMessage = $"Failed to get download URLs for update {updateId}: {requestResult.ErrorMessage}";
+                    _callbacks.Error?.Invoke(new InvalidOperationException(errorMessage), errorMessage);
                 }
             }
             catch (Exception ex)
             {
-                LoggingService.WriteError(cmdlet, ServiceName, $"Failed to get download URLs for update {updateId}: {ex.Message}", ex);
+                _callbacks.Error?.Invoke(ex, $"Failed to get download URLs for update {updateId}: {ex.Message}");
             }
 
             return downloadUrls;
@@ -529,7 +525,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Applies sorting to catalog results using ViewState
         /// </summary>
-        private CatalogSortResult ApplySorting(string baseUrl, CatalogSession session, WindowsUpdateSearchCriteria criteria, PSCmdlet? cmdlet)
+        private CatalogSortResult ApplySorting(string baseUrl, CatalogSession session, WindowsUpdateSearchCriteria criteria)
         {
             var result = new CatalogSortResult { Session = session };
 
@@ -546,7 +542,7 @@ namespace PSWindowsImageTools.Services
                     return result;
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName, $"Applying sort: {sortBy} ({(descending ? "descending" : "ascending")})");
+                _callbacks.Verbose?.Invoke($"Applying sort: {sortBy} ({(descending ? "descending" : "ascending")})");
 
                 // First sort request
                 var sortData = new Dictionary<string, string>
@@ -558,14 +554,14 @@ namespace PSWindowsImageTools.Services
                     ["__VIEWSTATEGENERATOR"] = session.ViewStateGenerator
                 };
 
-                var sortResponse = PerformCatalogRequest(baseUrl, "POST", sortData, false, cmdlet);
+                var sortResponse = PerformCatalogRequest(baseUrl, "POST", sortData, false);
                 if (!sortResponse.Success)
                 {
                     result.ErrorMessage = sortResponse.ErrorMessage;
                     return result;
                 }
 
-                var parseResult = ParseCatalogResponse(sortResponse.Html, session, false, cmdlet);
+                var parseResult = ParseCatalogResponse(sortResponse.Html, session, false);
                 if (parseResult.NoResults)
                 {
                     result.ErrorMessage = "No results after sorting";
@@ -575,12 +571,12 @@ namespace PSWindowsImageTools.Services
                 // Handle double-sort for specific cases (based on MSCatalog logic)
                 if ((sortBy == SortFieldLastUpdated && !descending) || (sortBy != SortFieldLastUpdated && descending))
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, "Applying second sort request for proper order");
+                    _callbacks.Verbose?.Invoke( "Applying second sort request for proper order");
 
-                    var secondSortResponse = PerformCatalogRequest(baseUrl, "POST", sortData, false, cmdlet);
+                    var secondSortResponse = PerformCatalogRequest(baseUrl, "POST", sortData, false);
                     if (secondSortResponse.Success)
                     {
-                        var secondParseResult = ParseCatalogResponse(secondSortResponse.Html, session, false, cmdlet);
+                        var secondParseResult = ParseCatalogResponse(secondSortResponse.Html, session, false);
                         if (!secondParseResult.NoResults)
                         {
                             parseResult = secondParseResult;
@@ -620,9 +616,9 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Includes download URLs for updates (optional, causes extra requests)
         /// </summary>
-        private void IncludeDownloadUrls(List<WindowsUpdate> updates, CatalogSession session, PSCmdlet? cmdlet)
+        private void IncludeDownloadUrls(List<WindowsUpdate> updates, CatalogSession session)
         {
-            LoggingService.WriteVerbose(cmdlet, ServiceName, $"Including download URLs for {updates.Count} updates");
+            _callbacks.Verbose?.Invoke($"Including download URLs for {updates.Count} updates");
 
             foreach (var update in updates)
             {
@@ -630,7 +626,7 @@ namespace PSWindowsImageTools.Services
                 {
                     if (!string.IsNullOrEmpty(update.UpdateId))
                     {
-                        var uris = GetDownloadUrls(update.UpdateId, cmdlet);
+                        var uris = GetDownloadUrls(update.UpdateId);
                         update.DownloadUrls = uris.Select(uri => uri.OriginalString).ToList();
                     }
                 }
@@ -671,14 +667,14 @@ namespace PSWindowsImageTools.Services
         /// C0: Icon/Checkbox (skip), C1: Title, C2: Products, C3: Classification,
         /// C4: Last Updated, C5: Version, C6: Size, C7: Download
         /// </summary>
-        private WindowsUpdate? ParseUpdateRow(HtmlNode row, PSCmdlet? cmdlet)
+        private WindowsUpdate? ParseUpdateRow(HtmlNode row)
         {
             try
             {
                 var cells = row.SelectNodes(".//td");
                 if (cells == null || cells.Count < 7)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Row has insufficient columns: {cells?.Count ?? 0} (need at least 7)");
+                    _callbacks.Verbose?.Invoke($"Row has insufficient columns: {cells?.Count ?? 0} (need at least 7)");
                     return null; // Need at least 7 columns (C0-C6)
                 }
 
@@ -695,12 +691,12 @@ namespace PSWindowsImageTools.Services
                     }
                     else
                     {
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"Could not extract update ID from row ID: {rowId}");
+                        _callbacks.Verbose?.Invoke($"Could not extract update ID from row ID: {rowId}");
                     }
                 }
                 else
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, "Row has no ID attribute");
+                    _callbacks.Verbose?.Invoke( "Row has no ID attribute");
                 }
 
                 // C1: Title (second cell - skip C0 which is icon/checkbox)
@@ -799,7 +795,7 @@ namespace PSWindowsImageTools.Services
             }
             catch (Exception ex)
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, $"Failed to parse update row: {ex.Message}");
+                _callbacks.Verbose?.Invoke($"Failed to parse update row: {ex.Message}");
                 return null;
             }
         }
@@ -808,7 +804,7 @@ namespace PSWindowsImageTools.Services
         /// Parses download URLs from the download dialog HTML
         /// Based on Windows Update Catalog specification - extracts URLs from JavaScript downloadInformation variable
         /// </summary>
-        private static List<Uri> ParseDownloadUrls(string html, PSCmdlet? cmdlet)
+        private List<Uri> ParseDownloadUrls(string html)
         {
             var urls = new List<Uri>();
 
@@ -867,7 +863,7 @@ namespace PSWindowsImageTools.Services
             }
             catch (Exception ex)
             {
-                LoggingService.WriteError(cmdlet, ServiceName, $"Failed to parse download URLs: {ex.Message}", ex);
+                _callbacks.Error?.Invoke(ex, $"Failed to parse download URLs: {ex.Message}");
             }
 
             return urls;
@@ -949,7 +945,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Applies additional filters to the search results
         /// </summary>
-        private List<WindowsUpdate> ApplyFilters(List<WindowsUpdate> updates, WindowsUpdateSearchCriteria criteria, PSCmdlet? cmdlet)
+        private List<WindowsUpdate> ApplyFilters(List<WindowsUpdate> updates, WindowsUpdateSearchCriteria criteria)
         {
             var filtered = updates.AsEnumerable();
 
@@ -980,7 +976,7 @@ namespace PSWindowsImageTools.Services
             
             if (result.Count != updates.Count)
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, 
+                _callbacks.Verbose?.Invoke( 
                     $"Applied filters: {updates.Count} -> {result.Count} updates");
             }
 
@@ -988,6 +984,31 @@ namespace PSWindowsImageTools.Services
         }
 
 
+
+        /// <summary>
+        /// Logs the start of an operation with a human-readable timestamp
+        /// </summary>
+        private DateTime LogOperationStart(string operationName, string? details = null)
+        {
+            var startTime = DateTime.UtcNow;
+            var message = string.IsNullOrEmpty(details)
+                ? $"Starting {operationName} at {LoggingService.FormatTimestamp(DateTime.Now)}"
+                : $"Starting {operationName} at {LoggingService.FormatTimestamp(DateTime.Now)} - {details}";
+            _callbacks.Verbose?.Invoke(message);
+            return startTime;
+        }
+
+        /// <summary>
+        /// Logs the completion of an operation with a human-readable timestamp and duration
+        /// </summary>
+        private void LogOperationComplete(string operationName, DateTime startTime, string? details = null)
+        {
+            var endTime = DateTime.UtcNow;
+            var message = string.IsNullOrEmpty(details)
+                ? $"Completed {operationName} at {LoggingService.FormatTimestamp(DateTime.Now)} (Duration: {LoggingService.FormatDuration(endTime - startTime)})"
+                : $"Completed {operationName} at {LoggingService.FormatTimestamp(DateTime.Now)} (Duration: {LoggingService.FormatDuration(endTime - startTime)}) - {details}";
+            _callbacks.Verbose?.Invoke(message);
+        }
 
         /// <summary>
         /// Disposes the service

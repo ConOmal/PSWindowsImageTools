@@ -73,6 +73,14 @@ namespace PSWindowsImageTools.Cmdlets
         public string CompressionType { get; set; } = "Max";
 
         /// <summary>
+        /// Desired maximum size of each split part (in MB). If omitted, the export will be a single file.
+        /// </summary>
+        [Parameter(HelpMessage = "Maximum size of each split part in MB (optional)")]
+        [ValidateRange(1, long.MaxValue)]
+        public long? SplitSize { get; set; }
+
+
+        /// <summary>
         /// Verify file integrity during export
         /// </summary>
         [Parameter(HelpMessage = "Verify file integrity during export")]
@@ -209,7 +217,8 @@ namespace PSWindowsImageTools.Cmdlets
                                     $"{percent}%", percent);
                             },
                             cmdlet: this,
-                            destinationDescription: DestinationDescription);
+                            destinationDescription: DestinationDescription,
+                            splitSize: SplitSize);
 
                         result.Success = success;
                         result.Duration = DateTime.UtcNow - exportStartTime;

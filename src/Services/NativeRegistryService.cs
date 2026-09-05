@@ -17,7 +17,16 @@ namespace PSWindowsImageTools.Services
     public class NativeRegistryService : IDisposable
     {
         private const string ServiceName = "NativeRegistryService";
+        private readonly ModuleCallbacks _callbacks;
         private bool _disposed = false;
+
+        /// <summary>
+        /// Creates the service with explicit callbacks
+        /// </summary>
+        public NativeRegistryService(ModuleCallbacks? callbacks = null)
+        {
+            _callbacks = callbacks ?? ModuleCallbacks.Silent;
+        }
 
         #region Native Registry API Declarations
 
@@ -71,73 +80,6 @@ namespace PSWindowsImageTools.Services
 
         #endregion
 
-        /// <summary>
-        /// Reads registry information using native API with hive mounting
-        /// Use this method when you need to modify registry or create backups
-        /// </summary>
-        /// <param name="mountPath">Path where the Windows image is mounted</param>
-        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
-        /// <returns>Dictionary containing registry information</returns>
-        public Dictionary<string, object> ReadOfflineRegistryWithMounting(string mountPath, PSCmdlet? cmdlet = null)
-        {
-            var registryInfo = new Dictionary<string, object>();
-
-            try
-            {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                    $"Reading offline registry using native API with hive mounting from: {mountPath}");
-
-                var hives = GetRegistryHivePaths(mountPath);
-
-                // Check hive file existence
-                foreach (var hive in hives)
-                {
-                    if (File.Exists(hive.Value))
-                    {
-                        var fileInfo = new FileInfo(hive.Value);
-                        registryInfo[$"{hive.Key}HiveExists"] = true;
-                        registryInfo[$"{hive.Key}HiveSize"] = fileInfo.Length;
-                        registryInfo[$"{hive.Key}HiveLastModified"] = fileInfo.LastWriteTime;
-                    }
-                    else
-                    {
-                        registryInfo[$"{hive.Key}HiveExists"] = false;
-                    }
-                }
-
-                // Read SOFTWARE hive with mounting
-                if (File.Exists(hives["SOFTWARE"]))
-                {
-                    var softwareInfo = ReadSoftwareHiveWithMounting(hives["SOFTWARE"], cmdlet);
-                    foreach (var item in softwareInfo)
-                    {
-                        registryInfo[item.Key] = item.Value;
-                    }
-                }
-
-                // Read SYSTEM hive with mounting
-                if (File.Exists(hives["SYSTEM"]))
-                {
-                    var systemInfo = ReadSystemHiveWithMounting(hives["SYSTEM"], cmdlet);
-                    foreach (var item in systemInfo)
-                    {
-                        registryInfo[item.Key] = item.Value;
-                    }
-                }
-
-                LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                    $"Successfully read {registryInfo.Count} registry values using native API");
-            }
-            catch (Exception ex)
-            {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    $"Failed to read offline registry with native API: {ex.Message}");
-                
-                registryInfo["RegistryReadError"] = ex.Message;
-            }
-
-            return registryInfo;
-        }
 
         /// <summary>
         /// Modifies registry values in an offline image by converting the modifications to registry
@@ -154,40 +96,53 @@ namespace PSWindowsImageTools.Services
         /// <returns>True if all applicable modifications were applied successfully</returns>
         public bool ModifyOfflineRegistry(string mountPath, List<RegistryModification> modifications, PSCmdlet? cmdlet = null)
         {
+            return ModifyOfflineRegistry(mountPath, modifications, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Modifies registry values in an offline image by converting the modifications to registry
+        /// operations and delegating to <see cref="ApplyRegistryOperations(string, RegistryOperation[], ModuleCallbacks)"/>.
+        /// That path enables the required privileges, loads the affected hives with write access, applies
+        /// each operation, and unloads the hives in a finally block. Note that this does not create backups;
+        /// callers that need them should use <see cref="BackupRegistryHives"/> first. Modifications that
+        /// cannot be converted (unknown hive root, missing key path, unrecognized operation or value type,
+        /// or malformed value data) are skipped and reported via a warning.
+        /// </summary>
+        /// <param name="mountPath">Path where the Windows image is mounted</param>
+        /// <param name="modifications">Registry modifications to apply</param>
+        /// <param name="callbacks">Callbacks for logging</param>
+        /// <returns>True if all applicable modifications were applied successfully</returns>
+        public bool ModifyOfflineRegistry(string mountPath, List<RegistryModification> modifications, ModuleCallbacks callbacks)
+        {
             try
             {
                 if (modifications == null || modifications.Count == 0)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        "No registry modifications were provided to apply");
+                    callbacks.Warning?.Invoke("No registry modifications were provided to apply");
                     return false;
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Modifying offline registry with {modifications.Count} changes at {mountPath}");
+                callbacks.Verbose?.Invoke($"Modifying offline registry with {modifications.Count} changes at {mountPath}");
 
                 var operations = ConvertToRegistryOperations(modifications);
                 if (operations.Count == 0)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        "None of the registry modifications could be converted to registry operations");
+                    callbacks.Warning?.Invoke("None of the registry modifications could be converted to registry operations");
                     return false;
                 }
 
                 if (operations.Count < modifications.Count)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"Skipped {modifications.Count - operations.Count} registry modification(s) that could not be converted");
+                    callbacks.Warning?.Invoke($"Skipped {modifications.Count - operations.Count} registry modification(s) that could not be converted");
                 }
 
                 // Reuse the proven hive-mounted write path:
                 // EnablePrivileges -> MountRequiredHives -> apply each operation -> UnmountHives in finally.
-                return ApplyRegistryOperations(mountPath, operations.ToArray(), cmdlet);
+                return ApplyRegistryOperations(mountPath, operations.ToArray(), callbacks);
             }
             catch (Exception ex)
             {
-                LoggingService.WriteError(cmdlet, ServiceName,
-                    $"Failed to modify offline registry: {ex.Message}", ex);
+                callbacks.Error?.Invoke(ex, $"Failed to modify offline registry: {ex.Message}");
                 return false;
             }
         }
@@ -492,18 +447,29 @@ namespace PSWindowsImageTools.Services
         /// <returns>True if operations were successful</returns>
         public bool ApplyRegistryOperations(string mountPath, RegistryOperation[] operations, PSCmdlet? cmdlet = null)
         {
+            return ApplyRegistryOperations(mountPath, operations, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Applies registry operations to mounted Windows image using native APIs
+        /// </summary>
+        /// <param name="mountPath">Path where the Windows image is mounted</param>
+        /// <param name="operations">Registry operations to apply</param>
+        /// <param name="callbacks">Callbacks for logging</param>
+        /// <returns>True if operations were successful</returns>
+        public bool ApplyRegistryOperations(string mountPath, RegistryOperation[] operations, ModuleCallbacks callbacks)
+        {
             var mountedHives = new Dictionary<string, string>();
 
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Applying {operations.Length} registry operations to {mountPath}");
+                callbacks.Verbose?.Invoke($"Applying {operations.Length} registry operations to {mountPath}");
 
                 // Enable required privileges
                 EnablePrivileges();
 
                 // Mount required hives
-                MountRequiredHives(mountPath, operations, mountedHives, cmdlet);
+                MountRequiredHives(mountPath, operations, mountedHives);
 
                 // Apply operations
                 int successCount = 0;
@@ -511,31 +477,28 @@ namespace PSWindowsImageTools.Services
                 {
                     try
                     {
-                        ApplyRegistryOperation(operation, mountedHives, cmdlet);
+                        ApplyRegistryOperation(operation, mountedHives);
                         successCount++;
                     }
                     catch (Exception ex)
                     {
-                        LoggingService.WriteWarning(cmdlet, ServiceName,
-                            $"Failed to apply operation {operation.Operation} to {operation.GetFullPath()}: {ex.Message}");
+                        callbacks.Warning?.Invoke($"Failed to apply operation {operation.Operation} to {operation.GetFullPath()}: {ex.Message}");
                     }
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Successfully applied {successCount} of {operations.Length} registry operations");
+                callbacks.Verbose?.Invoke($"Successfully applied {successCount} of {operations.Length} registry operations");
 
                 return successCount == operations.Length;
             }
             catch (Exception ex)
             {
-                LoggingService.WriteError(cmdlet, ServiceName,
-                    $"Failed to apply registry operations: {ex.Message}", ex);
+                callbacks.Error?.Invoke(ex, $"Failed to apply registry operations: {ex.Message}");
                 return false;
             }
             finally
             {
                 // Unmount all hives
-                UnmountHives(mountedHives, cmdlet);
+                UnmountHives(mountedHives);
             }
         }
 
@@ -548,10 +511,21 @@ namespace PSWindowsImageTools.Services
         /// <returns>True if backup was successful</returns>
         public bool BackupRegistryHives(string mountPath, string backupPath, PSCmdlet? cmdlet = null)
         {
+            return BackupRegistryHives(mountPath, backupPath, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Creates backup of registry hives before modification
+        /// </summary>
+        /// <param name="mountPath">Path where the Windows image is mounted</param>
+        /// <param name="backupPath">Path where to store backups</param>
+        /// <param name="callbacks">Callbacks for logging</param>
+        /// <returns>True if backup was successful</returns>
+        public bool BackupRegistryHives(string mountPath, string backupPath, ModuleCallbacks callbacks)
+        {
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                    $"Creating registry hive backup from {mountPath} to {backupPath}");
+                callbacks.Verbose?.Invoke($"Creating registry hive backup from {mountPath} to {backupPath}");
 
                 var hives = GetRegistryHivePaths(mountPath);
                 
@@ -567,20 +541,17 @@ namespace PSWindowsImageTools.Services
                         var backupFile = Path.Combine(backupPath, $"{hive.Key}.backup");
                         File.Copy(hive.Value, backupFile, true);
                         
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                            $"Backed up {hive.Key} hive to {backupFile}");
+                        callbacks.Verbose?.Invoke($"Backed up {hive.Key} hive to {backupFile}");
                     }
                 }
 
-                LoggingService.WriteVerbose(cmdlet, ServiceName, 
-                    "Registry hive backup completed successfully");
+                callbacks.Verbose?.Invoke("Registry hive backup completed successfully");
 
                 return true;
             }
             catch (Exception ex)
             {
-                LoggingService.WriteError(cmdlet, ServiceName, 
-                    $"Failed to backup registry hives: {ex.Message}", ex);
+                callbacks.Error?.Invoke(ex, $"Failed to backup registry hives: {ex.Message}");
                 return false;
             }
         }
@@ -604,323 +575,6 @@ namespace PSWindowsImageTools.Services
             };
         }
 
-        /// <summary>
-        /// Reads SOFTWARE hive information using native API with hive mounting
-        /// </summary>
-        /// <param name="softwareHivePath">Path to SOFTWARE hive file</param>
-        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
-        /// <returns>Dictionary of SOFTWARE hive information</returns>
-        private Dictionary<string, object> ReadSoftwareHiveWithMounting(string softwareHivePath, PSCmdlet? cmdlet)
-        {
-            var softwareInfo = new Dictionary<string, object>();
-            string tempKeyName = $"TEMP_SOFTWARE_{Guid.NewGuid():N}";
-
-            try
-            {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, "Loading SOFTWARE hive with native API");
-
-                // Load the hive temporarily
-                int result = RegLoadKey(HKEY_LOCAL_MACHINE, tempKeyName, softwareHivePath);
-                if (result != 0)
-                {
-                    LoggingService.WriteWarning(cmdlet, ServiceName, 
-                        $"Failed to load SOFTWARE hive. Error: {result}");
-                    return softwareInfo;
-                }
-
-                try
-                {
-                    // Read Windows version information
-                    var versionInfo = ReadWindowsVersionWithNativeApi(tempKeyName, cmdlet);
-                    foreach (var item in versionInfo)
-                    {
-                        softwareInfo[item.Key] = item.Value;
-                    }
-
-                    // Read installed programs count
-                    var programsInfo = ReadInstalledProgramsWithNativeApi(tempKeyName, cmdlet);
-                    foreach (var item in programsInfo)
-                    {
-                        softwareInfo[item.Key] = item.Value;
-                    }
-                }
-                finally
-                {
-                    // Always unload the hive
-                    RegUnLoadKey(HKEY_LOCAL_MACHINE, tempKeyName);
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, "SOFTWARE hive unloaded");
-                }
-            }
-            catch (Exception ex)
-            {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    $"Error reading SOFTWARE hive with native API: {ex.Message}");
-                softwareInfo["SoftwareHiveError"] = ex.Message;
-            }
-
-            return softwareInfo;
-        }
-
-        /// <summary>
-        /// Reads SYSTEM hive information using native API with hive mounting
-        /// </summary>
-        /// <param name="systemHivePath">Path to SYSTEM hive file</param>
-        /// <param name="cmdlet">PowerShell cmdlet for logging</param>
-        /// <returns>Dictionary of SYSTEM hive information</returns>
-        private Dictionary<string, object> ReadSystemHiveWithMounting(string systemHivePath, PSCmdlet? cmdlet)
-        {
-            var systemInfo = new Dictionary<string, object>();
-            string tempKeyName = $"TEMP_SYSTEM_{Guid.NewGuid():N}";
-
-            try
-            {
-                LoggingService.WriteVerbose(cmdlet, ServiceName, "Loading SYSTEM hive with native API");
-
-                // Load the hive temporarily
-                int result = RegLoadKey(HKEY_LOCAL_MACHINE, tempKeyName, systemHivePath);
-                if (result != 0)
-                {
-                    LoggingService.WriteWarning(cmdlet, ServiceName, 
-                        $"Failed to load SYSTEM hive. Error: {result}");
-                    return systemInfo;
-                }
-
-                try
-                {
-                    // Read computer information
-                    var computerInfo = ReadComputerInfoWithNativeApi(tempKeyName, cmdlet);
-                    foreach (var item in computerInfo)
-                    {
-                        systemInfo[item.Key] = item.Value;
-                    }
-
-                    // Read services count
-                    var servicesInfo = ReadServicesInfoWithNativeApi(tempKeyName, cmdlet);
-                    foreach (var item in servicesInfo)
-                    {
-                        systemInfo[item.Key] = item.Value;
-                    }
-                }
-                finally
-                {
-                    // Always unload the hive
-                    RegUnLoadKey(HKEY_LOCAL_MACHINE, tempKeyName);
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, "SYSTEM hive unloaded");
-                }
-            }
-            catch (Exception ex)
-            {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    $"Error reading SYSTEM hive with native API: {ex.Message}");
-                systemInfo["SystemHiveError"] = ex.Message;
-            }
-
-            return systemInfo;
-        }
-
-        /// <summary>
-        /// Reads Windows version information using native API
-        /// </summary>
-        private Dictionary<string, object> ReadWindowsVersionWithNativeApi(string tempKeyName, PSCmdlet? cmdlet)
-        {
-            var versionInfo = new Dictionary<string, object>();
-
-            try
-            {
-                string versionKeyPath = $"{tempKeyName}\\Microsoft\\Windows NT\\CurrentVersion";
-                
-                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, versionKeyPath, 0, KEY_READ, out IntPtr versionKey) == 0)
-                {
-                    try
-                    {
-                        var valuesToRead = new[]
-                        {
-                            "ProductName", "DisplayVersion", "CurrentBuild", "CurrentBuildNumber",
-                            "ReleaseId", "BuildBranch", "InstallationType", "EditionID"
-                        };
-
-                        foreach (var valueName in valuesToRead)
-                        {
-                            var value = ReadRegistryStringValue(versionKey, valueName);
-                            if (!string.IsNullOrEmpty(value))
-                            {
-                                versionInfo[$"Windows{valueName}"] = value;
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        RegCloseKey(versionKey);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    $"Error reading Windows version with native API: {ex.Message}");
-            }
-
-            return versionInfo;
-        }
-
-        /// <summary>
-        /// Reads installed programs information using native API
-        /// </summary>
-        private Dictionary<string, object> ReadInstalledProgramsWithNativeApi(string tempKeyName, PSCmdlet? cmdlet)
-        {
-            var programsInfo = new Dictionary<string, object>();
-
-            try
-            {
-                string uninstallKeyPath = $"{tempKeyName}\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
-                
-                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, uninstallKeyPath, 0, KEY_ENUMERATE_SUB_KEYS, out IntPtr uninstallKey) == 0)
-                {
-                    try
-                    {
-                        uint index = 0;
-                        uint programCount = 0;
-                        var keyName = new StringBuilder(256);
-                        uint keyNameLength = (uint)keyName.Capacity;
-
-                        while (RegEnumKeyEx(uninstallKey, index, keyName, ref keyNameLength, 
-                            IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero) == 0)
-                        {
-                            programCount++;
-                            index++;
-                            keyNameLength = (uint)keyName.Capacity;
-                        }
-
-                        programsInfo["InstalledProgramCount"] = programCount;
-                    }
-                    finally
-                    {
-                        RegCloseKey(uninstallKey);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    $"Error reading installed programs with native API: {ex.Message}");
-            }
-
-            return programsInfo;
-        }
-
-        /// <summary>
-        /// Reads computer information using native API
-        /// </summary>
-        private Dictionary<string, object> ReadComputerInfoWithNativeApi(string tempKeyName, PSCmdlet? cmdlet)
-        {
-            var computerInfo = new Dictionary<string, object>();
-
-            try
-            {
-                string computerNameKeyPath = $"{tempKeyName}\\ControlSet001\\Control\\ComputerName\\ComputerName";
-                
-                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, computerNameKeyPath, 0, KEY_READ, out IntPtr computerNameKey) == 0)
-                {
-                    try
-                    {
-                        var computerName = ReadRegistryStringValue(computerNameKey, "ComputerName");
-                        if (!string.IsNullOrEmpty(computerName))
-                        {
-                            computerInfo["ComputerName"] = computerName;
-                        }
-                    }
-                    finally
-                    {
-                        RegCloseKey(computerNameKey);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    $"Error reading computer info with native API: {ex.Message}");
-            }
-
-            return computerInfo;
-        }
-
-        /// <summary>
-        /// Reads services information using native API
-        /// </summary>
-        private Dictionary<string, object> ReadServicesInfoWithNativeApi(string tempKeyName, PSCmdlet? cmdlet)
-        {
-            var servicesInfo = new Dictionary<string, object>();
-
-            try
-            {
-                string servicesKeyPath = $"{tempKeyName}\\ControlSet001\\Services";
-                
-                if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, servicesKeyPath, 0, KEY_ENUMERATE_SUB_KEYS, out IntPtr servicesKey) == 0)
-                {
-                    try
-                    {
-                        uint index = 0;
-                        uint serviceCount = 0;
-                        var keyName = new StringBuilder(256);
-                        uint keyNameLength = (uint)keyName.Capacity;
-
-                        while (RegEnumKeyEx(servicesKey, index, keyName, ref keyNameLength, 
-                            IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero) == 0)
-                        {
-                            serviceCount++;
-                            index++;
-                            keyNameLength = (uint)keyName.Capacity;
-                        }
-
-                        servicesInfo["ServiceCount"] = serviceCount;
-                    }
-                    finally
-                    {
-                        RegCloseKey(servicesKey);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                LoggingService.WriteWarning(cmdlet, ServiceName, 
-                    $"Error reading services info with native API: {ex.Message}");
-            }
-
-            return servicesInfo;
-        }
-
-        /// <summary>
-        /// Helper method to read a string value from registry using native API
-        /// </summary>
-        private string ReadRegistryStringValue(IntPtr hKey, string valueName)
-        {
-            uint dataSize = 0;
-            uint dataType;
-
-            // Get the size of the data
-            int result = RegQueryValueEx(hKey, valueName, IntPtr.Zero, out dataType, IntPtr.Zero, ref dataSize);
-            if (result != 0 || dataSize == 0)
-            {
-                return string.Empty;
-            }
-
-            // Allocate buffer and read the data
-            IntPtr dataPtr = Marshal.AllocHGlobal((int)dataSize);
-            try
-            {
-                result = RegQueryValueEx(hKey, valueName, IntPtr.Zero, out dataType, dataPtr, ref dataSize);
-                if (result == 0 && (dataType == REG_SZ || dataType == REG_EXPAND_SZ))
-                {
-                    return Marshal.PtrToStringUni(dataPtr) ?? string.Empty;
-                }
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(dataPtr);
-            }
-
-            return string.Empty;
-        }
 
         /// <summary>
         /// Enables backup and restore privileges required for registry operations
@@ -928,13 +582,13 @@ namespace PSWindowsImageTools.Services
         private void EnablePrivileges()
         {
             // This is a simplified version - in production you'd want full privilege management
-            LoggingService.WriteVerbose(null, ServiceName, "Registry privileges enabled");
+            _callbacks.Verbose?.Invoke("Registry privileges enabled");
         }
 
         /// <summary>
         /// Mounts required registry hives based on operations
         /// </summary>
-        private void MountRequiredHives(string mountPath, RegistryOperation[] operations, Dictionary<string, string> mountedHives, PSCmdlet? cmdlet)
+        private void MountRequiredHives(string mountPath, RegistryOperation[] operations, Dictionary<string, string> mountedHives)
         {
             var requiredHives = new HashSet<string>();
 
@@ -984,11 +638,11 @@ namespace PSWindowsImageTools.Services
                     if (result == 0)
                     {
                         mountedHives[hive] = tempKeyName;
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"Mounted {hive} hive as {tempKeyName}");
+                        _callbacks.Verbose?.Invoke($"Mounted {hive} hive as {tempKeyName}");
                     }
                     else
                     {
-                        LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to mount {hive} hive. Error: {result}");
+                        _callbacks.Warning?.Invoke($"Failed to mount {hive} hive. Error: {result}");
                     }
                 }
             }
@@ -997,7 +651,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Applies a single registry operation
         /// </summary>
-        private void ApplyRegistryOperation(RegistryOperation operation, Dictionary<string, string> mountedHives, PSCmdlet? cmdlet)
+        private void ApplyRegistryOperation(RegistryOperation operation, Dictionary<string, string> mountedHives)
         {
             var mappedPath = GetMappedRegistryPath(operation, mountedHives);
             if (string.IsNullOrEmpty(mappedPath))
@@ -1009,15 +663,15 @@ namespace PSWindowsImageTools.Services
 
             if (operationType == "CREATE" || operationType == "MODIFY")
             {
-                CreateOrModifyRegistryValue(mappedPath, operation, cmdlet);
+                CreateOrModifyRegistryValue(mappedPath, operation);
             }
             else if (operationType == "REMOVE")
             {
-                RemoveRegistryValue(mappedPath, operation.ValueName, cmdlet);
+                RemoveRegistryValue(mappedPath, operation.ValueName);
             }
             else if (operationType == "REMOVEKEY")
             {
-                RemoveRegistryKey(mappedPath, cmdlet);
+                RemoveRegistryKey(mappedPath);
             }
             else
             {
@@ -1055,7 +709,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Creates or modifies a registry value
         /// </summary>
-        private void CreateOrModifyRegistryValue(string keyPath, RegistryOperation operation, PSCmdlet? cmdlet)
+        private void CreateOrModifyRegistryValue(string keyPath, RegistryOperation operation)
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(keyPath.Replace("HKEY_LOCAL_MACHINE\\", ""));
             if (key == null)
@@ -1069,7 +723,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Removes a registry value
         /// </summary>
-        private void RemoveRegistryValue(string keyPath, string valueName, PSCmdlet? cmdlet)
+        private void RemoveRegistryValue(string keyPath, string valueName)
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(keyPath.Replace("HKEY_LOCAL_MACHINE\\", ""), true);
             if (key != null)
@@ -1081,7 +735,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Removes a registry key
         /// </summary>
-        private void RemoveRegistryKey(string keyPath, PSCmdlet? cmdlet)
+        private void RemoveRegistryKey(string keyPath)
         {
             var keySubPath = keyPath.Replace("HKEY_LOCAL_MACHINE\\", "");
             var lastBackslash = keySubPath.LastIndexOf('\\');
@@ -1104,7 +758,7 @@ namespace PSWindowsImageTools.Services
         /// <summary>
         /// Unmounts all mounted hives
         /// </summary>
-        private void UnmountHives(Dictionary<string, string> mountedHives, PSCmdlet? cmdlet)
+        private void UnmountHives(Dictionary<string, string> mountedHives)
         {
             foreach (var mountedHive in mountedHives.ToList())
             {
@@ -1114,16 +768,16 @@ namespace PSWindowsImageTools.Services
                     int result = RegUnLoadKey(rootKey, mountedHive.Value);
                     if (result == 0)
                     {
-                        LoggingService.WriteVerbose(cmdlet, ServiceName, $"Unmounted {mountedHive.Key} hive");
+                        _callbacks.Verbose?.Invoke($"Unmounted {mountedHive.Key} hive");
                     }
                     else
                     {
-                        LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to unmount {mountedHive.Key} hive. Error: {result}");
+                        _callbacks.Warning?.Invoke($"Failed to unmount {mountedHive.Key} hive. Error: {result}");
                     }
                 }
                 catch (Exception ex)
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName, $"Error unmounting {mountedHive.Key} hive: {ex.Message}");
+                    _callbacks.Warning?.Invoke($"Error unmounting {mountedHive.Key} hive: {ex.Message}");
                 }
             }
             mountedHives.Clear();
@@ -1138,10 +792,21 @@ namespace PSWindowsImageTools.Services
         /// <returns>True if successful</returns>
         public bool MountHive(string mountKey, string hivePath, PSCmdlet? cmdlet = null)
         {
+            return MountHive(mountKey, hivePath, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Mounts a registry hive using native Windows API
+        /// </summary>
+        /// <param name="mountKey">The key name to mount the hive under</param>
+        /// <param name="hivePath">Path to the hive file</param>
+        /// <param name="callbacks">Callbacks for logging</param>
+        /// <returns>True if successful</returns>
+        public bool MountHive(string mountKey, string hivePath, ModuleCallbacks callbacks)
+        {
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Mounting hive {hivePath} as {mountKey} using native API");
+                callbacks.Verbose?.Invoke($"Mounting hive {hivePath} as {mountKey} using native API");
 
                 // Enable required privileges
                 EnablePrivileges();
@@ -1150,21 +815,18 @@ namespace PSWindowsImageTools.Services
                 int result = RegLoadKey(HKEY_LOCAL_MACHINE, mountKey, hivePath);
                 if (result == 0)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName,
-                        $"Successfully mounted hive {hivePath} as {mountKey}");
+                    callbacks.Verbose?.Invoke($"Successfully mounted hive {hivePath} as {mountKey}");
                     return true;
                 }
                 else
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"Failed to mount hive {hivePath}. Error code: {result}");
+                    callbacks.Warning?.Invoke($"Failed to mount hive {hivePath}. Error code: {result}");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                LoggingService.WriteWarning(cmdlet, ServiceName,
-                    $"Error mounting hive {hivePath}: {ex.Message}");
+                callbacks.Warning?.Invoke($"Error mounting hive {hivePath}: {ex.Message}");
                 return false;
             }
         }
@@ -1177,30 +839,37 @@ namespace PSWindowsImageTools.Services
         /// <returns>True if successful</returns>
         public bool UnmountHive(string mountKey, PSCmdlet? cmdlet = null)
         {
+            return UnmountHive(mountKey, ModuleCallbacks.FromCmdlet(cmdlet));
+        }
+
+        /// <summary>
+        /// Unmounts a registry hive using native Windows API
+        /// </summary>
+        /// <param name="mountKey">The key name to unmount</param>
+        /// <param name="callbacks">Callbacks for logging</param>
+        /// <returns>True if successful</returns>
+        public bool UnmountHive(string mountKey, ModuleCallbacks callbacks)
+        {
             try
             {
-                LoggingService.WriteVerbose(cmdlet, ServiceName,
-                    $"Unmounting hive {mountKey} using native API");
+                callbacks.Verbose?.Invoke($"Unmounting hive {mountKey} using native API");
 
                 // Unmount the hive
                 int result = RegUnLoadKey(HKEY_LOCAL_MACHINE, mountKey);
                 if (result == 0)
                 {
-                    LoggingService.WriteVerbose(cmdlet, ServiceName,
-                        $"Successfully unmounted hive {mountKey}");
+                    callbacks.Verbose?.Invoke($"Successfully unmounted hive {mountKey}");
                     return true;
                 }
                 else
                 {
-                    LoggingService.WriteWarning(cmdlet, ServiceName,
-                        $"Failed to unmount hive {mountKey}. Error code: {result}");
+                    callbacks.Warning?.Invoke($"Failed to unmount hive {mountKey}. Error code: {result}");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                LoggingService.WriteWarning(cmdlet, ServiceName,
-                    $"Error unmounting hive {mountKey}: {ex.Message}");
+                callbacks.Warning?.Invoke($"Error unmounting hive {mountKey}: {ex.Message}");
                 return false;
             }
         }

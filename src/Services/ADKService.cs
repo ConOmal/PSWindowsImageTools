@@ -35,7 +35,7 @@ namespace PSWindowsImageTools.Services
 
                 try
                 {
-                    var uninstallEntries = RegistryService.EnumerateUninstallEntries(cmdlet);
+                    var uninstallEntries = RegistryService.EnumerateUninstallEntries();
 
                     foreach (var entry in uninstallEntries)
                     {

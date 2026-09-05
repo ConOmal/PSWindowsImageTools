@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Management.Automation;
-using Microsoft.Win32;
 using PSWindowsImageTools.Models;
 
 namespace PSWindowsImageTools.Services
@@ -15,7 +13,6 @@ namespace PSWindowsImageTools.Services
     {
         private const string ServiceName = "RegistryApplicationService";
         private readonly Dictionary<string, NativeRegistryService> _nativeServices = new Dictionary<string, NativeRegistryService>();
-        private readonly Dictionary<string, string> _mountedHives = new Dictionary<string, string>();
         private readonly ModuleCallbacks _callbacks;
 
         /// <summary>
@@ -77,11 +74,6 @@ namespace PSWindowsImageTools.Services
                     failedResult.FailedOperations.AddRange(operations);
                     results.Add(failedResult);
                 }
-                finally
-                {
-                    // Ensure hives are unmounted for this image
-                    UnmountAllHives(mountedImage, callbacks);
-                }
             }
 
             callbacks.Verbose?.Invoke($"Registry operations completed. Processed {totalImages} images");
@@ -114,7 +106,7 @@ namespace PSWindowsImageTools.Services
                 {
                     throw new InvalidOperationException("Image mount path is null");
                 }
-                bool success = nativeService.ApplyRegistryOperations(mountedImage.MountPath.FullName, operations, null);
+                bool success = nativeService.ApplyRegistryOperations(mountedImage.MountPath.FullName, operations, callbacks);
 
                 if (success)
                 {
@@ -123,10 +115,9 @@ namespace PSWindowsImageTools.Services
                 }
                 else
                 {
-                    // If the native service doesn't provide detailed results, we assume partial success
-                    var halfCount = operations.Length / 2;
-                    result.SuccessfulOperations.AddRange(operations.Take(halfCount));
-                    result.FailedOperations.AddRange(operations.Skip(halfCount));
+                    // ApplyRegistryOperations returns false when at least one operation failed;
+                    // without per-operation results we conservatively mark all as failed.
+                    result.FailedOperations.AddRange(operations);
 
                     callbacks.Warning?.Invoke($"Some registry operations failed for {mountedImage.ImageName} - check verbose logs for details");
                 }
@@ -175,187 +166,6 @@ namespace PSWindowsImageTools.Services
                 service.Dispose();
             }
             _nativeServices.Clear();
-        }
-
-
-
-        /// <summary>
-        /// Gets the file path for a registry hive in the mounted image
-        /// </summary>
-        private string GetHivePath(MountedWindowsImage mountedImage, string hive)
-        {
-            if (mountedImage.MountPath == null)
-                throw new InvalidOperationException("Mount path is null");
-            var mountPath = mountedImage.MountPath.FullName;
-            var upperHive = hive.ToUpperInvariant();
-
-            if (upperHive == "HKLM")
-                return Path.Combine(mountPath, "Windows", "System32", "config", "SYSTEM");
-            if (upperHive == "HKU")
-                return Path.Combine(mountPath, "Users", "Default", "NTUSER.DAT");
-            if (upperHive.StartsWith("HKLM\\SOFTWARE\\Classes"))
-                return Path.Combine(mountPath, "Windows", "System32", "config", "SOFTWARE");
-            if (upperHive.StartsWith("HKLM\\"))
-                return Path.Combine(mountPath, "Windows", "System32", "config", "SYSTEM");
-
-            return string.Empty;
-        }
-
-        /// <summary>
-        /// Mounts a registry hive and returns the mount key
-        /// </summary>
-        private string MountRegistryHive(string hive, string hivePath, ModuleCallbacks callbacks)
-        {
-            if (!File.Exists(hivePath))
-            {
-                throw new FileNotFoundException($"Registry hive file not found: {hivePath}");
-            }
-
-            var mountKey = $"HKLM\\TEMP_{Guid.NewGuid():N}";
-
-            try
-            {
-                callbacks.Verbose?.Invoke($"Mounting registry hive {hive} from {hivePath} to {mountKey}");
-
-                // Use native registry service for mounting
-                var nativeService = new NativeRegistryService();
-                bool success = nativeService.MountHive(mountKey.Replace("HKLM\\", ""), hivePath, null);
-
-                if (!success)
-                {
-                    throw new InvalidOperationException($"Failed to mount registry hive {hive} using native API");
-                }
-
-                _mountedHives[hive] = mountKey;
-                return mountKey;
-            }
-            catch (Exception ex)
-            {
-                callbacks.Warning?.Invoke($"Failed to mount registry hive {hive}: {ex.Message}");
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Unmounts a registry hive using native Windows API
-        /// </summary>
-        private void UnmountRegistryHive(string mountKey, ModuleCallbacks callbacks)
-        {
-            try
-            {
-                callbacks.Verbose?.Invoke($"Unmounting registry hive {mountKey} using native API");
-
-                // Use native registry service for unmounting
-                var nativeService = new NativeRegistryService();
-                bool success = nativeService.UnmountHive(mountKey.Replace("HKLM\\", ""), null);
-
-                if (success)
-                {
-                    // Remove from tracking
-                    _mountedHives.Remove(mountKey);
-                }
-                else
-                {
-                    callbacks.Warning?.Invoke($"Failed to unmount registry hive {mountKey}");
-                }
-
-                callbacks.Verbose?.Invoke($"Successfully unmounted registry hive {mountKey}");
-            }
-            catch (Exception ex)
-            {
-                callbacks.Warning?.Invoke($"Error unmounting registry hive {mountKey}: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Unmounts all registry hives for an image
-        /// </summary>
-        private void UnmountAllHives(MountedWindowsImage mountedImage, ModuleCallbacks callbacks)
-        {
-            var hivesToUnmount = _mountedHives.Values.ToList();
-            foreach (var mountKey in hivesToUnmount)
-            {
-                UnmountRegistryHive(mountKey, callbacks);
-            }
-            _mountedHives.Clear();
-        }
-
-        /// <summary>
-        /// Applies a single registry operation
-        /// </summary>
-        private void ApplySingleOperation(RegistryOperation operation, string mountKey, ModuleCallbacks callbacks)
-        {
-            var fullKeyPath = $"{mountKey}\\{operation.Key}";
-
-            callbacks.Verbose?.Invoke($"Applying operation: {operation.Operation} on {fullKeyPath}\\{operation.ValueName}");
-
-            switch (operation.Operation)
-            {
-                case RegistryOperationType.Create:
-                case RegistryOperationType.Modify:
-                    CreateOrModifyValue(fullKeyPath, operation, callbacks);
-                    break;
-
-                case RegistryOperationType.Remove:
-                    RemoveValue(fullKeyPath, operation.ValueName, callbacks);
-                    break;
-
-                case RegistryOperationType.RemoveKey:
-                    RemoveKey(fullKeyPath, callbacks);
-                    break;
-
-                default:
-                    throw new NotSupportedException($"Operation type {operation.Operation} is not supported");
-            }
-        }
-
-        /// <summary>
-        /// Creates or modifies a registry value
-        /// </summary>
-        private void CreateOrModifyValue(string keyPath, RegistryOperation operation, ModuleCallbacks callbacks)
-        {
-            using var key = Microsoft.Win32.Registry.LocalMachine.CreateSubKey(keyPath.Substring("HKLM\\".Length));
-            if (key == null)
-            {
-                throw new InvalidOperationException($"Failed to create or open registry key: {keyPath}");
-            }
-
-            key.SetValue(operation.ValueName, operation.Value ?? "", operation.ValueType);
-        }
-
-        /// <summary>
-        /// Removes a registry value
-        /// </summary>
-        private void RemoveValue(string keyPath, string valueName, ModuleCallbacks callbacks)
-        {
-            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(keyPath.Substring("HKLM\\".Length), true);
-            if (key != null)
-            {
-                key.DeleteValue(valueName, false);
-            }
-        }
-
-        /// <summary>
-        /// Removes a registry key
-        /// </summary>
-        private void RemoveKey(string keyPath, ModuleCallbacks callbacks)
-        {
-            var keySubPath = keyPath.Substring("HKLM\\".Length);
-            var lastBackslash = keySubPath.LastIndexOf('\\');
-
-            if (lastBackslash >= 0)
-            {
-                var parentPath = keySubPath.Substring(0, lastBackslash);
-                var keyName = keySubPath.Substring(lastBackslash + 1);
-
-                using var parentKey = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(parentPath, true);
-                parentKey?.DeleteSubKeyTree(keyName, false);
-            }
-            else
-            {
-                // Deleting a root key - be very careful
-                Microsoft.Win32.Registry.LocalMachine.DeleteSubKeyTree(keySubPath, false);
-            }
         }
     }
 }

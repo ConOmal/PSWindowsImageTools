@@ -34,7 +34,6 @@ namespace PSWindowsImageTools.Services
             string sourceImagePath,
             string destinationImagePath,
             uint sourceIndex,
-            string? sourceName = null,
             string? destinationName = null,
             string compressionType = "Max",
             bool checkIntegrity = false,
@@ -42,7 +41,8 @@ namespace PSWindowsImageTools.Services
             string? scratchDirectory = null,
             Action<int, string>? progressCallback = null,
             PSCmdlet? cmdlet = null,
-            string? destinationDescription = null)
+            string? destinationDescription = null,
+            long? splitSize = null)
         {
             // Validate parameters
             if (string.IsNullOrEmpty(sourceImagePath) || !File.Exists(sourceImagePath))
@@ -105,20 +105,8 @@ namespace PSWindowsImageTools.Services
                     }
                 }
 
-                // Resolve source image index if name was provided
+                // Resolve source image index if name was provided (not needed here, caller passes index)
                 uint actualSourceIndex = sourceIndex;
-                if (!string.IsNullOrEmpty(sourceName))
-                {
-                    var resolvedIndex = GetWimIndexByName(sourceImagePath, sourceName!, cmdlet);
-                    if (resolvedIndex == null)
-                    {
-                        LoggingService.WriteError(cmdlet, ServiceName, $"No image named '{sourceName}' found in {sourceImagePath}");
-                        return false;
-                    }
-
-                    actualSourceIndex = resolvedIndex.Value;
-                    LoggingService.WriteVerbose(cmdlet, ServiceName, $"Resolved source name '{sourceName}' to index {actualSourceIndex}");
-                }
 
                 // Load source image
                 sourceImageHandle = WimNativeApi.WIMLoadImage(sourceWimHandle, actualSourceIndex);
@@ -146,7 +134,7 @@ namespace PSWindowsImageTools.Services
 
                     // Determine compression type
                     uint compression = WimNativeApi.ParseCompressionType(compressionType);
-                    
+
                     // Create destination WIM file
                     uint destFlags = WimNativeApi.GetWimCreateFlags(checkIntegrity, false);
                     if (compression == WimNativeApi.WIM_COMPRESS_LZMS)
@@ -180,7 +168,6 @@ namespace PSWindowsImageTools.Services
                 {
                     nativeCallback = (messageId, wParam, lParam, userData) =>
                     {
-                        // Handle WIM progress messages
                         if (messageId == 0x9448) // WIM_MSG_PROGRESS
                         {
                             var current = (uint)wParam.ToInt32();
@@ -191,7 +178,7 @@ namespace PSWindowsImageTools.Services
                                 progressCallback(percentage, $"Exporting image: {percentage}%");
                             }
                         }
-                        return 0; // Continue operation
+                        return 0;
                     };
 
                     var callbackResult = WimNativeApi.WIMRegisterMessageCallback(destinationWimHandle, nativeCallback, IntPtr.Zero);
@@ -203,7 +190,6 @@ namespace PSWindowsImageTools.Services
 
                 // Perform the actual export
                 LoggingService.WriteVerbose(cmdlet, ServiceName, "Performing WIM export operation");
-                
                 uint exportFlags = WimNativeApi.GetWimExportFlags();
                 bool exportResult = WimNativeApi.WIMExportImage(sourceImageHandle, destinationWimHandle, exportFlags);
 
@@ -218,6 +204,43 @@ namespace PSWindowsImageTools.Services
                 if (nativeCallback != null)
                 {
                     WimNativeApi.WIMUnregisterMessageCallback(destinationWimHandle, nativeCallback);
+                }
+
+                // Post‑export split handling
+                if (splitSize.HasValue && splitSize.Value > 0)
+                {
+                    try
+                    {
+                        var chunkSizeBytes = splitSize.Value * 1024 * 1024;
+                        var fileInfo = new FileInfo(destinationImagePath);
+                        using var sourceStream = new FileStream(destinationImagePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        int partNumber = 1;
+                        byte[] buffer = new byte[81920]; // 80 KB buffer
+                        while (sourceStream.Position < fileInfo.Length)
+                        {
+                            var partPath = Path.Combine(fileInfo.DirectoryName ?? "", $"{Path.GetFileNameWithoutExtension(fileInfo.Name)}.part{partNumber:D3}{fileInfo.Extension}");
+                            using var partStream = new FileStream(partPath, FileMode.Create, FileAccess.Write);
+                            long bytesRemaining = Math.Min(chunkSizeBytes, fileInfo.Length - sourceStream.Position);
+                            while (bytesRemaining > 0)
+                            {
+                                int read = sourceStream.Read(buffer, 0, (int)Math.Min(buffer.Length, bytesRemaining));
+                                if (read <= 0) break;
+                                partStream.Write(buffer, 0, read);
+                                bytesRemaining -= read;
+                            }
+                            partNumber++;
+                        }
+                        // Optionally delete the original large file if split successful
+                        try
+                        {
+                            File.Delete(destinationImagePath);
+                        }
+                        catch { /* ignore */ }
+                    }
+                    catch (Exception splitEx)
+                    {
+                        LoggingService.WriteWarning(cmdlet, ServiceName, $"Failed to split exported WIM file: {splitEx.Message}");
+                    }
                 }
 
                 // Determine the index of the newly exported image (always appended last)

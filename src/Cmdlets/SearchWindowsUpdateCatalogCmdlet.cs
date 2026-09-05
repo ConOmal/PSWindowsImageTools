@@ -186,7 +186,7 @@ namespace PSWindowsImageTools.Cmdlets
         private List<WindowsUpdateCatalogResult> SearchSingleQuery(string query)
         {
             // Use the existing WindowsUpdateCatalogService but convert to new object model
-            using var catalogService = new WindowsUpdateCatalogService();
+            using var catalogService = new WindowsUpdateCatalogService(ModuleCallbacks.FromCmdlet(this));
 
             // Create search criteria from the query
             var criteria = new WindowsUpdateSearchCriteria
@@ -199,7 +199,7 @@ namespace PSWindowsImageTools.Cmdlets
                 Product = Product
             };
 
-            var searchResult = catalogService.SearchUpdates(criteria, false, DebugMode.IsPresent, this);
+            var searchResult = catalogService.SearchUpdates(criteria, false, DebugMode.IsPresent);
 
             var newResults = searchResult.Updates.Select(ConvertToNewModel).ToList();
 

@@ -57,7 +57,7 @@ namespace PSWindowsImageTools.Cmdlets
 
             try
             {
-                using var catalogService = new WindowsUpdateCatalogService();
+                using var catalogService = new WindowsUpdateCatalogService(ModuleCallbacks.FromCmdlet(this));
 
                 LoggingService.WriteVerbose(this, $"Getting download URLs for {_allResults.Count} updates");
 
@@ -102,7 +102,7 @@ namespace PSWindowsImageTools.Cmdlets
                 {
                     LoggingService.WriteVerbose(this, $"Getting download URLs for: {result.Title}");
 
-                    var downloadUrls = catalogService.GetDownloadUrls(result.UpdateId, this);
+                    var downloadUrls = catalogService.GetDownloadUrls(result.UpdateId);
                     result.DownloadUrls = downloadUrls.ToArray();
                     result.HasDownloadUrls = downloadUrls.Any();
 
